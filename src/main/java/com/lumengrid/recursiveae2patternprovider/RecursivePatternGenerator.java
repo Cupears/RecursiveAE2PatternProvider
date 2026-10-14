@@ -306,7 +306,7 @@ public final class RecursivePatternGenerator {
 
                 ItemStack[] inputs = getRecipeInputsAs3x3Grid(recipe.value());
 
-                if (containsAny(inputs, ctx.ancestors) || containsItem(inputs, targetType)) {
+                if (shouldSkipDependency(inputs, targetType, ctx.ancestors, ctx.settings.retainAlternatives())) {
                     RecursiveAE2PatternProvider.LOGGER.debug("Skipping cyclic recipe {} for {}",
                             recipe.id(), targetType);
                     continue;
@@ -347,6 +347,12 @@ public final class RecursivePatternGenerator {
     private static AECraftingPattern encodePattern(RecipeHolder<CraftingRecipe> recipe, ItemStack[] inputs,
                                                    ItemStack output, IPatternDetails parentPattern,
                                                    Level level) {
+        ItemStack patternStack = encodePatternStack(recipe, inputs, output, parentPattern);
+        return new AECraftingPattern(Objects.requireNonNull(AEItemKey.of(patternStack)), level);
+    }
+
+    static ItemStack encodePatternStack(RecipeHolder<CraftingRecipe> recipe, ItemStack[] inputs,
+                                       ItemStack output, IPatternDetails parentPattern) {
         ItemStack patternStack = AEItems.CRAFTING_PATTERN.stack();
 
         boolean allowSubstitutes = Config.DEFAULT_ALLOW_SUBSTITUTES.get();
@@ -357,8 +363,14 @@ public final class RecursivePatternGenerator {
             allowFluidSubstitutes = parentCraftingPattern.canSubstituteFluids();
         }
 
+        if (Config.GENERATED_INGREDIENT_ALTERNATIVES.get()) allowSubstitutes = true;
+
         AECraftingPattern.encode(patternStack, recipe, inputs, output, allowSubstitutes, allowFluidSubstitutes);
-        return new AECraftingPattern(Objects.requireNonNull(AEItemKey.of(patternStack)), level);
+        return patternStack;
+    }
+
+    static boolean shouldSkipDependency(ItemStack[] inputs, Item target, Set<Item> ancestors, boolean retainAlternatives) {
+        return containsItem(inputs, target) || (!retainAlternatives && containsAny(inputs, ancestors));
     }
 
     private static boolean usesItem(CraftingRecipe recipe, Item item) {

@@ -27,6 +27,31 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(EphemeralTestServerProvider.class)
 class AvailableRecipePlanningTest {
     @Test
+    void storedCopperBlocksSupplyBothBlockAndIngotDependencies(MinecraftServer server) throws Exception {
+        var root = new AEProcessingPattern(AEItemKey.of(PatternDetailsHelper.encodeProcessingPattern(
+                List.of(new GenericStack(AEItemKey.of(Items.COPPER_BLOCK), 1), new GenericStack(AEItemKey.of(Items.COPPER_INGOT), 1)),
+                List.of(new GenericStack(AEItemKey.of(Items.CLOCK), 1)))));
+        var unpack = new AEProcessingPattern(AEItemKey.of(PatternDetailsHelper.encodeProcessingPattern(
+                List.of(new GenericStack(AEItemKey.of(Items.COPPER_BLOCK), 1)),
+                List.of(new GenericStack(AEItemKey.of(Items.COPPER_INGOT), 9)))));
+        var pack = new AEProcessingPattern(AEItemKey.of(PatternDetailsHelper.encodeProcessingPattern(
+                List.of(new GenericStack(AEItemKey.of(Items.COPPER_INGOT), 9)),
+                List.of(new GenericStack(AEItemKey.of(Items.COPPER_BLOCK), 1)))));
+        var plan = calculate(List.of(root, pack, unpack), Map.of(Items.COPPER_BLOCK, 2L), Items.CLOCK, 1);
+        assertFalse(plan.simulation());
+        assertEquals(1L, plan.patternTimes().get(unpack));
+        assertFalse(plan.patternTimes().containsKey(pack));
+    }
+
+    @Test
+    void inadequateStockStillProducesAPartialPlan(MinecraftServer server) throws Exception {
+        var blocks = pattern(Items.REDSTONE_BLOCK, 1, 9);
+        var hats = pattern(Items.LEATHER_HELMET, 3, 6);
+        var plan = calculate(List.of(blocks, hats), Map.of(Items.REDSTONE_BLOCK, 1L), 100);
+        assertTrue(plan.simulation());
+        assertFalse(plan.missingItems().isEmpty());
+    }
+    @Test
     void availableBlocksWorkEvenWhenHatPatternIsFirst(MinecraftServer server) throws Exception {
         var hats = pattern(Items.LEATHER_HELMET, 3, 6);
         var blocks = pattern(Items.REDSTONE_BLOCK, 1, 9);
@@ -68,6 +93,10 @@ class AvailableRecipePlanningTest {
     }
 
     private ICraftingPlan calculate(List<IPatternDetails> patterns, Map<Item, Long> stock, long amount) throws Exception {
+        return calculate(patterns, stock, Items.REDSTONE, amount);
+    }
+
+    private ICraftingPlan calculate(List<IPatternDetails> patterns, Map<Item, Long> stock, Item output, long amount) throws Exception {
         var inventory = new KeyCounter();
         stock.forEach((item, count) -> inventory.add(AEItemKey.of(item), count));
         var storage = stub(IStorageService.class, (name, args) -> switch (name) {
@@ -75,7 +104,8 @@ class AvailableRecipePlanningTest {
             default -> throw new AssertionError(name);
         });
         var crafting = stub(ICraftingService.class, (name, args) -> switch (name) {
-            case "getCraftingFor" -> AEItemKey.of(Items.REDSTONE).equals(args[0]) ? patterns : List.of();
+            case "getCraftingFor" -> patterns.stream().filter(p -> p.getOutputs().stream()
+                    .anyMatch(o -> o.what().equals(args[0]))).toList();
             case "canEmitFor" -> false;
             case "getFuzzyCraftable" -> null;
             default -> throw new AssertionError(name);
@@ -95,7 +125,7 @@ class AvailableRecipePlanningTest {
             default -> throw new AssertionError(name);
         });
         var calculation = new CraftingCalculation(null, grid, requester,
-                new GenericStack(AEItemKey.of(Items.REDSTONE), amount), CalculationStrategy.REPORT_MISSING_ITEMS);
+                new GenericStack(AEItemKey.of(output), amount), CalculationStrategy.REPORT_MISSING_ITEMS);
         // Run the synchronous calculation directly; bypass the tick scheduler's
         // initial pause in this small fixture, not any crafting decisions.
         var incTime = CraftingCalculation.class.getDeclaredField("incTime");

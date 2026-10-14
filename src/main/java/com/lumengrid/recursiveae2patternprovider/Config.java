@@ -39,6 +39,10 @@ public class Config {
             .comment("Publish valid recipe alternatives for AE2 to check against stock during each crafting calculation. Includes stored block/nugget conversions without expanding compression chains. Publishes at most 64 alternatives per item; when false, uses maxAlternativesPerItem and static selection.")
             .define("retainRecipeAlternatives", true);
 
+    public static final ModConfigSpec.BooleanValue GENERATED_INGREDIENT_ALTERNATIVES = BUILDER
+            .comment("Allow recipe-valid item alternatives in auto-generated patterns (e.g. interchangeable logs/planks). AE2 validates the recipe and unchanged output. Does not change manually encoded root patterns. When false, generated patterns inherit the parent substitution setting.")
+            .define("generatedIngredientAlternatives", true);
+
     public static final ModConfigSpec.BooleanValue SKIP_SELF_REFERENTIAL_RECIPES = BUILDER
             .comment("Ignore recipes that consume their own output (e.g. 'clear settings' / NBT-wipe recipes) when generating dependency patterns")
             .define("skipSelfReferentialRecipes", true);

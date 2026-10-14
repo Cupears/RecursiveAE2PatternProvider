@@ -41,11 +41,11 @@ class RecipeSelectionTest {
     }
 
     @Test
-    void conversionAlternativesStillRespectAncestorsAndBlacklist(MinecraftServer server) {
+    void firstVisitAncestorsDoNotPermanentlyHideStockConversions(MinecraftServer server) {
         conversions(Items.IRON_INGOT, Items.IRON_BLOCK, Items.IRON_NUGGET);
         var choices = selector(Set.of(Items.IRON_INGOT)).alternatives(Items.IRON_INGOT, Set.of(Items.IRON_BLOCK));
-        assertEquals(1, choices.size());
-        assertEquals("minecraft:ingot_from_nuggets", choices.getFirst().recipe().id().identifier().toString());
+        assertEquals(2, choices.size());
+        assertTrue(choices.stream().anyMatch(c -> c.recipe().id().identifier().toString().equals("minecraft:ingot_from_block")));
         var selection = new RecipeSelection(index, Set.of(), r -> false, this::grid);
         assertTrue(selection.alternatives(Items.IRON_INGOT, Set.of()).isEmpty());
     }

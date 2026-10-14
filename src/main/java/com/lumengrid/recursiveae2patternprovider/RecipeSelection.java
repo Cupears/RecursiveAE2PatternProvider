@@ -32,7 +32,9 @@ final class RecipeSelection {
 
     List<Choice> alternatives(Item target, Set<Item> ancestors) {
         Map<RecipeHolder<CraftingRecipe>, Choice> choices = new LinkedHashMap<>();
-        for (var choice : rank(target, ancestors)) choices.put(choice.recipe(), choice);
+        // Registration is global, not specific to the first path that reaches
+        // this item. AE2 rejects recursive branches during each calculation.
+        for (var choice : rank(target, Set.of())) choices.put(choice.recipe(), choice);
         for (var recipe : index.getOrDefault(target, List.of())) {
             try {
                 if (!allowed.test(recipe) || !isConversion(recipe.value(), target)) continue;
@@ -42,7 +44,7 @@ final class RecipeSelection {
                 boolean cyclic = false;
                 for (var input : grid.apply(recipe.value())) {
                     if (input.isEmpty()) continue;
-                    if (input.is(target) || ancestors.contains(input.getItem())) { cyclic = true; break; }
+                    if (input.is(target)) { cyclic = true; break; }
                     inputs += input.getCount();
                 }
                 if (!cyclic) choices.putIfAbsent(recipe, new Choice(recipe, inputs / output.getCount()));
