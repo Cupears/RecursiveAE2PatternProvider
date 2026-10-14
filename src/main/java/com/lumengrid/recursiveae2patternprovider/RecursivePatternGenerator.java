@@ -6,7 +6,6 @@ import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.core.definitions.AEItems;
 import appeng.crafting.pattern.AECraftingPattern;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -17,7 +16,6 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -30,7 +28,7 @@ public final class RecursivePatternGenerator {
     private RecursivePatternGenerator() {}
 
     private record CachedIndex(WeakReference<Object> manager, int recipeCount,
-                               Map<Item, List<RecipeHolder<CraftingRecipe>>> index) {
+                               Map<Item, List<RecipeHolder<CraftingRecipe>>> index, Set<Item> furnaceOutputs) {
         boolean matches(Object current, int currentRecipeCount) {
             return manager.get() == current && recipeCount == currentRecipeCount;
         }
@@ -83,12 +81,18 @@ public final class RecursivePatternGenerator {
         final Set<AEItemKey> processedItems = new HashSet<>();
         final Set<Item> ancestors = new HashSet<>();
         final List<IPatternDetails> generated = new ArrayList<>();
+        final RecipeSelection selection;
 
         Context(Level level, int maxDepth, Map<Item, List<RecipeHolder<CraftingRecipe>>> index, Settings settings) {
             this.level = level;
             this.maxDepth = maxDepth;
             this.index = index;
             this.settings = settings;
+            this.selection = new RecipeSelection(index, getFurnaceOutputs(level.getServer().getRecipeManager()),
+                    r -> !settings.isBlacklisted(r.id().identifier())
+                            && (!settings.skipSelfReferential() || !usesItem(r.value(),
+                            r.value().assemble(CraftingInput.EMPTY).getItem())),
+                    RecursivePatternGenerator::getRecipeInputsAs3x3Grid);
         }
     }
 
@@ -99,6 +103,10 @@ public final class RecursivePatternGenerator {
             return new HashMap<>();
         }
         RecipeManager manager = level.getServer().getRecipeManager();
+        return getRecipeIndex(manager);
+    }
+
+    private static Map<Item, List<RecipeHolder<CraftingRecipe>>> getRecipeIndex(RecipeManager manager) {
         int recipeCount = manager.getRecipes().size();
         CachedIndex snapshot = cached;
         if (snapshot != null && snapshot.matches(manager, recipeCount)) {
@@ -111,8 +119,16 @@ public final class RecursivePatternGenerator {
             }
             long start = System.nanoTime();
             Map<Item, List<RecipeHolder<CraftingRecipe>>> newIndex = new HashMap<>();
-            var registryAccess = level.registryAccess();
+            Set<Item> furnaceOutputs = new HashSet<>();
             for (RecipeHolder<?> holder : manager.getRecipes()) {
+                if (holder.value() instanceof AbstractCookingRecipe cooking) {
+                    try {
+                        var result = cooking.assemble(new SingleRecipeInput(ItemStack.EMPTY));
+                        if (!result.isEmpty()) furnaceOutputs.add(result.getItem());
+                    } catch (RuntimeException e) {
+                        RecursiveAE2PatternProvider.LOGGER.debug("Skipping cooking recipe {}: {}", holder.id(), e.getMessage());
+                    }
+                }
                 if (holder.value() instanceof CraftingRecipe craftingRecipe) {
                     @SuppressWarnings("unchecked")
                     RecipeHolder<CraftingRecipe> recipe = (RecipeHolder<CraftingRecipe>) holder;
@@ -127,13 +143,19 @@ public final class RecursivePatternGenerator {
                     }
                 }
             }
-            cached = new CachedIndex(new WeakReference<>(manager), recipeCount, newIndex);
+            newIndex.values().forEach(recipes -> recipes.sort(java.util.Comparator.comparing(r -> r.id().identifier().toString())));
+            cached = new CachedIndex(new WeakReference<>(manager), recipeCount, newIndex, furnaceOutputs);
             RecursiveAE2PatternProvider.LOGGER.info(
                     "Indexed {} crafting recipes by output item in {} ms",
                     newIndex.values().stream().mapToInt(List::size).sum(),
                     (System.nanoTime() - start) / 1_000_000);
             return newIndex;
         }
+    }
+
+    private static Set<Item> getFurnaceOutputs(RecipeManager manager) {
+        getRecipeIndex(manager);
+        return cached == null ? Set.of() : cached.furnaceOutputs();
     }
 
     public static List<IPatternDetails> collectRecursivePatterns(Iterable<ItemStack> patternInventory, Level level) {
@@ -255,16 +277,11 @@ public final class RecursivePatternGenerator {
             return;
         }
 
-        String ownerNamespace = BuiltInRegistries.ITEM.getKey(targetType).getNamespace();
-
-        List<RecipeHolder<CraftingRecipe>> ordered = candidates.stream()
+        List<RecipeHolder<CraftingRecipe>> ordered = ctx.selection.rank(targetType, ctx.ancestors).stream()
+                .map(RecipeSelection.Choice::recipe)
                 .filter(r -> !ctx.processedRecipes.contains(r.id().toString()))
                 .filter(r -> !ctx.settings.isBlacklisted(r.id().identifier()))
                 .filter(r -> !ctx.settings.skipSelfReferential() || !usesItem(r.value(), targetType))
-                .sorted(Comparator
-                        .comparingInt((RecipeHolder<CraftingRecipe> r) -> isPlainVanilla(r.value()) ? 0 : 1)
-                        .thenComparingInt(r -> r.id().identifier().getNamespace().equals(ownerNamespace) ? 0 : 1)
-                        .thenComparing(r -> r.id().toString()))
                 .toList();
 
         int created = 0;
@@ -344,11 +361,6 @@ public final class RecursivePatternGenerator {
             return true;
         }
         return false;
-    }
-
-    private static boolean isPlainVanilla(CraftingRecipe recipe) {
-        Class<?> type = recipe.getClass();
-        return type == ShapedRecipe.class || type == ShapelessRecipe.class;
     }
 
     private static boolean containsAny(ItemStack[] grid, Set<Item> items) {
