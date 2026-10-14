@@ -13,6 +13,11 @@ import appeng.crafting.pattern.AEProcessingPattern;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.ShapedRecipe;
+import net.minecraft.world.item.crafting.ShapedRecipePattern;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +31,73 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Exercise AE2's real calculation/backtracking with a small in-memory grid. */
 @ExtendWith(EphemeralTestServerProvider.class)
 class AvailableRecipePlanningTest {
+    @Test
+    void generatedPrimaryVariantsSupplyDrawerAndChestsFromOakLogs(MinecraftServer server) throws Exception {
+        var planks = Ingredient.of(Items.DARK_OAK_PLANKS, Items.OAK_PLANKS);
+        var chestRecipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of('P', planks), "PPP", "P P", "PPP"),
+                new ItemStackTemplate(Items.CHEST));
+        // Barrel identity stands in for a Functional Storage drawer. Its
+        // 8-plank + chest recipe has the same dependency shape as the mod.
+        var drawerRecipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(
+                Map.of('P', planks, 'C', Ingredient.of(Items.CHEST)), "PPP", "PCP", "PPP"), new ItemStackTemplate(Items.BARREL));
+        var original = new ItemStack[9];
+        Arrays.setAll(original, i -> new ItemStack(Items.DARK_OAK_PLANKS));
+        original[4] = ItemStack.EMPTY;
+        List<IPatternDetails> patterns = new ArrayList<>();
+        for (var grid : RecipeInputVariants.generate(chestRecipe, original, new ItemStack(Items.CHEST), null, 64)) {
+            patterns.add(processing(Arrays.stream(grid).filter(s -> !s.isEmpty()).map(s -> new GenericStack(AEItemKey.of(s), 1)).toList(), Items.CHEST, 1));
+        }
+        original[4] = new ItemStack(Items.CHEST);
+        for (var grid : RecipeInputVariants.generate(drawerRecipe, original, new ItemStack(Items.BARREL), null, 64)) {
+            patterns.add(processing(Arrays.stream(grid).filter(s -> !s.isEmpty()).map(s -> new GenericStack(AEItemKey.of(s), 1)).toList(), Items.BARREL, 1));
+        }
+        patterns.add(processing(List.of(new GenericStack(AEItemKey.of(Items.BARREL), 1), new GenericStack(AEItemKey.of(Items.CHEST), 2)), Items.CLOCK, 1));
+        patterns.add(processing(List.of(new GenericStack(AEItemKey.of(Items.OAK_LOG), 1)), Items.OAK_PLANKS, 4));
+        patterns.add(processing(List.of(new GenericStack(AEItemKey.of(Items.DARK_OAK_LOG), 1)), Items.DARK_OAK_PLANKS, 4));
+        var plan = calculate(patterns, Map.of(Items.OAK_LOG, 8L), Items.CLOCK, 1);
+        assertFalse(plan.simulation());
+        assertTrue(plan.missingItems().isEmpty());
+        assertEquals(8L, plan.usedItems().get(AEItemKey.of(Items.OAK_LOG)));
+        assertEquals(0L, plan.usedItems().get(AEItemKey.of(Items.DARK_OAK_LOG)));
+    }
+    @Test
+    void primaryWoodVariantsAllowCraftingFromStockedOakLogs(MinecraftServer server) throws Exception {
+        var darkChest = processing(List.of(new GenericStack(AEItemKey.of(Items.DARK_OAK_PLANKS), 8)), Items.CHEST, 1);
+        var oakChest = processing(List.of(new GenericStack(AEItemKey.of(Items.OAK_PLANKS), 8)), Items.CHEST, 1);
+        var darkPlanks = processing(List.of(new GenericStack(AEItemKey.of(Items.DARK_OAK_LOG), 1)), Items.DARK_OAK_PLANKS, 4);
+        var oakPlanks = processing(List.of(new GenericStack(AEItemKey.of(Items.OAK_LOG), 1)), Items.OAK_PLANKS, 4);
+        var flexibleChest = flexibleWood(darkChest);
+        // A craftable primary output pins the child crafting branch even though
+        // the input accepts stocked oak planks. Oak logs alone don't satisfy it.
+        var withoutVariant = calculate(List.of(flexibleChest, darkPlanks, oakPlanks), Map.of(Items.OAK_LOG, 2L), Items.CHEST, 1);
+        assertTrue(withoutVariant.simulation());
+        var withVariant = calculate(List.of(flexibleChest, oakChest, darkPlanks, oakPlanks), Map.of(Items.OAK_LOG, 2L), Items.CHEST, 1);
+        assertFalse(withVariant.simulation());
+        assertTrue(withVariant.patternTimes().containsKey(oakChest));
+        assertFalse(withVariant.patternTimes().containsKey(darkPlanks));
+    }
+
+    private IPatternDetails processing(List<GenericStack> inputs, Item output, int count) {
+        return new AEProcessingPattern(AEItemKey.of(PatternDetailsHelper.encodeProcessingPattern(
+                inputs, List.of(new GenericStack(AEItemKey.of(output), count)))));
+    }
+
+    private IPatternDetails flexibleWood(IPatternDetails primary) {
+        var original = primary.getInputs()[0];
+        var flexible = new IPatternDetails.IInput() {
+            public GenericStack[] getPossibleInputs() { return new GenericStack[]{
+                    new GenericStack(AEItemKey.of(Items.DARK_OAK_PLANKS), 1),
+                    new GenericStack(AEItemKey.of(Items.OAK_PLANKS), 1)}; }
+            public long getMultiplier() { return original.getMultiplier(); }
+            public boolean isValid(AEKey key, net.minecraft.world.level.Level level) {
+                return key.equals(AEItemKey.of(Items.DARK_OAK_PLANKS)) || key.equals(AEItemKey.of(Items.OAK_PLANKS));
+            }
+            public AEKey getRemainingKey(AEKey key) { return null; }
+        };
+        return (IPatternDetails) Proxy.newProxyInstance(IPatternDetails.class.getClassLoader(), new Class<?>[]{IPatternDetails.class},
+                (proxy, method, args) -> method.getName().equals("getInputs")
+                        ? new IPatternDetails.IInput[]{flexible} : method.invoke(primary, args));
+    }
     @Test
     void storedCopperBlocksSupplyBothBlockAndIngotDependencies(MinecraftServer server) throws Exception {
         var root = new AEProcessingPattern(AEItemKey.of(PatternDetailsHelper.encodeProcessingPattern(

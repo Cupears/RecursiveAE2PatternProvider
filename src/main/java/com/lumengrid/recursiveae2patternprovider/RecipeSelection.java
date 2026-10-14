@@ -62,8 +62,12 @@ final class RecipeSelection {
     }
 
     boolean isConversion(CraftingRecipe recipe, Item target) {
+        return isConversion(grid.apply(recipe), target);
+    }
+
+    boolean isConversion(ItemStack[] inputs, Item target) {
         Item source = null;
-        for (var input : grid.apply(recipe)) {
+        for (var input : inputs) {
             if (input.isEmpty()) continue;
             if (source != null && source != input.getItem()) return false;
             source = input.getItem();

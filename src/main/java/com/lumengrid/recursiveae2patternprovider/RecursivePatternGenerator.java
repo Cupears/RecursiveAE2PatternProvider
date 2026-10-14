@@ -304,36 +304,29 @@ public final class RecursivePatternGenerator {
                     continue;
                 }
 
-                ItemStack[] inputs = getRecipeInputsAs3x3Grid(recipe.value());
+                ItemStack[] original = getRecipeInputsAs3x3Grid(recipe.value());
+                int remaining = (ctx.settings.retainAlternatives() ? 64 : ctx.settings.maxAlternativesPerItem()) - created;
+                List<ItemStack[]> variants = Config.GENERATED_INGREDIENT_ALTERNATIVES.get()
+                        ? RecipeInputVariants.generate(recipe.value(), original, recipeOutput, ctx.level, remaining)
+                        : java.util.Collections.singletonList(original);
+                for (ItemStack[] inputs : variants) {
+                    if (shouldSkipDependency(inputs, targetType, ctx.ancestors, ctx.settings.retainAlternatives())) continue;
+                    try {
+                        AECraftingPattern aePattern = encodePattern(recipe, inputs, recipeOutput, parentPattern, ctx.level);
+                        if (aePattern == null || aePattern.getOutputs() == null || aePattern.getOutputs().isEmpty()) continue;
+                        ctx.generated.add(aePattern);
+                        created++;
+                        ctx.processedRecipes.add(recipe.id().toString());
 
-                if (shouldSkipDependency(inputs, targetType, ctx.ancestors, ctx.settings.retainAlternatives())) {
-                    RecursiveAE2PatternProvider.LOGGER.debug("Skipping cyclic recipe {} for {}",
-                            recipe.id(), targetType);
-                    continue;
-                }
-
-                ctx.processedRecipes.add(recipe.id().toString());
-
-                AECraftingPattern aePattern = encodePattern(recipe, inputs, recipeOutput, parentPattern, ctx.level);
-                if (aePattern == null || aePattern.getOutputs() == null || aePattern.getOutputs().isEmpty()) {
-                    continue;
-                }
-
-                ctx.generated.add(aePattern);
-                created++;
-
-                // Publish conversions for AE2 to use if their source is available.
-                // Recursing into the opposite conversion creates compression ladders.
-                if (ctx.settings.retainAlternatives() && ctx.selection.isConversion(recipe.value(), targetType)) {
-                    continue;
-                }
-
-                boolean added = ctx.ancestors.add(targetType);
-                try {
-                    generateDependencyPatterns(aePattern, currentDepth + 1, ctx);
-                } finally {
-                    if (added) {
-                        ctx.ancestors.remove(targetType);
+                        if (ctx.settings.retainAlternatives() && ctx.selection.isConversion(inputs, targetType)) continue;
+                        boolean added = ctx.ancestors.add(targetType);
+                        try {
+                            generateDependencyPatterns(aePattern, currentDepth + 1, ctx);
+                        } finally {
+                            if (added) ctx.ancestors.remove(targetType);
+                        }
+                    } catch (RuntimeException e) {
+                        RecursiveAE2PatternProvider.LOGGER.debug("Failed ingredient variant for {}: {}", recipe.id(), e.getMessage());
                     }
                 }
 
