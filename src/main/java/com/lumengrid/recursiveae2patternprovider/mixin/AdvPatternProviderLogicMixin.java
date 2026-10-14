@@ -6,6 +6,8 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.stacks.AEKey;
 import appeng.util.inv.AppEngInternalInventory;
 import com.lumengrid.recursiveae2patternprovider.Config;
+import com.lumengrid.recursiveae2patternprovider.RefreshingRecursiveProvider;
+import com.lumengrid.recursiveae2patternprovider.StalePatternKeys;
 import com.lumengrid.recursiveae2patternprovider.RecursiveAE2PatternProvider;
 import com.lumengrid.recursiveae2patternprovider.RecursivePatternGenerator;
 import net.minecraft.world.level.Level;
@@ -14,6 +16,7 @@ import net.pedroksl.advanced_ae.common.logic.AdvPatternProviderLogicHost;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -22,7 +25,7 @@ import java.util.List;
 import java.util.Set;
 
 @Mixin(AdvPatternProviderLogic.class)
-public class AdvPatternProviderLogicMixin {
+public abstract class AdvPatternProviderLogicMixin implements RefreshingRecursiveProvider {
 
     @Shadow
     private AdvPatternProviderLogicHost host;
@@ -43,12 +46,28 @@ public class AdvPatternProviderLogicMixin {
     @Final
     private Set<AEKey> patternInputs;
 
+    @Shadow
+    public abstract void updatePatterns();
+
+    @Unique
+    private boolean recursiveAE2$hasRecursivePatterns;
+
+    @Override
+    public boolean recursiveAE2$refreshStalePatterns() {
+        if (!Config.ENABLE.get() || !recursiveAE2$hasRecursivePatterns
+                || !StalePatternKeys.containsStaleKeys(patterns)) return false;
+        updatePatterns();
+        RecursiveAE2PatternProvider.LOGGER.info("Refreshed recursive patterns after an item identity changed");
+        return true;
+    }
+
     /**
      * Inject dependency pattern generation after the original updatePatterns() completes.
      * All heavy lifting is delegated to RecursivePatternGenerator (shared cached index).
      */
     @Inject(method = "updatePatterns", at = @At("RETURN"), remap = false)
     private void injectDependencyPatterns(CallbackInfo ci) {
+        recursiveAE2$hasRecursivePatterns = false;
         try {
             if (!Config.ENABLE.get()) {
                 return;
@@ -66,6 +85,8 @@ public class AdvPatternProviderLogicMixin {
 
             List<IPatternDetails> recursivePatterns =
                     RecursivePatternGenerator.collectRecursivePatterns(this.patternInventory, level);
+
+            recursiveAE2$hasRecursivePatterns = !recursivePatterns.isEmpty();
 
             List<IPatternDetails> generated =
                     RecursivePatternGenerator.generate(recursivePatterns, this.patterns, level, maxDepth);

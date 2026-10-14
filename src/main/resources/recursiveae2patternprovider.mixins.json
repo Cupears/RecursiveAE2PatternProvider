@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "plugin": "com.lumengrid.recursiveae2patternprovider.mixin.RecursiveAE2MixinPlugin",
   "mixins": [
+    "CraftingServiceMixin",
     "CraftConfirmMenuMixin",
     "PatternProviderLogicMixin",
     "PatternEncodingTermMenuMixin",
