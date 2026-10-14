@@ -6,6 +6,7 @@ import appeng.client.gui.me.items.CraftingEncodingPanel;
 import appeng.client.gui.me.items.PatternEncodingTermScreen;
 import appeng.client.gui.widgets.ToggleButton;
 import com.lumengrid.recursiveae2patternprovider.Config;
+import com.lumengrid.recursiveae2patternprovider.menu.IRecursivePatternMenu;
 import com.lumengrid.recursiveae2patternprovider.network.ToggleRecursiveModeC2SPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -30,9 +31,6 @@ public abstract class CraftingEncodingPanelMixin {
     @Unique
     private ToggleButton recursiveBtn;
 
-    @Unique
-    private boolean isRecursiveLocal = false;
-
     @Inject(method = "<init>", at = @At("TAIL"))
     private void addRecursiveButton(PatternEncodingTermScreen<?> screen, WidgetContainer widgets, CallbackInfo ci) {
         this.panelScreen = screen;
@@ -41,9 +39,9 @@ public abstract class CraftingEncodingPanelMixin {
                 Icon.S_SUBSTITUTION_ENABLED,
                 Icon.S_SUBSTITUTION_DISABLED,
                 state -> {
-                    this.isRecursiveLocal = state;
+                    if (screen.getMenu() instanceof IRecursivePatternMenu menu) menu.setRecursiveMode(state);
                     if (Minecraft.getInstance().getConnection() != null) {
-                        Minecraft.getInstance().getConnection().send(new ToggleRecursiveModeC2SPacket(this.isRecursiveLocal));
+                        Minecraft.getInstance().getConnection().send(new ToggleRecursiveModeC2SPacket(state));
                     }
                 }
         );
@@ -73,7 +71,7 @@ public abstract class CraftingEncodingPanelMixin {
         if (this.recursiveBtn != null && this.fluidSubstitutionsBtn != null) {
             this.recursiveBtn.setX(this.fluidSubstitutionsBtn.getX() + 10);
             this.recursiveBtn.setY(this.fluidSubstitutionsBtn.getY());
-            this.recursiveBtn.setState(this.isRecursiveLocal);
+            this.recursiveBtn.setState(this.panelScreen.getMenu() instanceof IRecursivePatternMenu menu && menu.isRecursiveMode());
 
             if (this.panelScreen != null) {
                 ScreenAccessor accessor = (ScreenAccessor) this.panelScreen;

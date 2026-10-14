@@ -1,6 +1,8 @@
 package com.lumengrid.recursiveae2patternprovider.mixin;
 
 import appeng.api.crafting.PatternDetailsHelper;
+import appeng.menu.guisync.GuiSync;
+import com.lumengrid.recursiveae2patternprovider.Config;
 import appeng.menu.slot.RestrictedInputSlot;
 import com.lhy.wcwt.menu.WirelessComprehensiveWorkTerminalMenu;
 import com.lumengrid.recursiveae2patternprovider.PatternUtil;
@@ -24,7 +26,8 @@ public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRec
     private RestrictedInputSlot encodedPatternSlot;
 
     @Unique
-    private boolean recursiveModeActive = false;
+    @GuiSync(30000)
+    public boolean recursiveModeActive = Config.ENABLE.get() && Config.DEFAULT_RECURSIVE_MODE.get();
 
     @Override
     public void setRecursiveMode(boolean active) {

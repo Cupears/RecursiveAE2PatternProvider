@@ -15,6 +15,10 @@ public class Config {
             .comment("Show the recursive pattern toggle button in the Pattern Encoding Terminal GUI. Default is true")
             .define("enableEncodingGuiToggle", true);
 
+    public static final ModConfigSpec.BooleanValue DEFAULT_RECURSIVE_MODE = BUILDER
+            .comment("Start newly opened pattern encoding terminals in recursive mode. The terminal toggle can override this for the current session. Uses the server setting in multiplayer; existing patterns are not converted.")
+            .define("defaultRecursiveMode", false);
+
     public static final ModConfigSpec.IntValue RECURSION_DEPTH = BUILDER
             .comment("Maximum recursion depth for dependency pattern generation. -1 = no limit, 0 = disable recursion, positive values = max depth")
             .defineInRange("recursionDepth", -1, -1, 100);
