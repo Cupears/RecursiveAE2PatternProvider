@@ -19,6 +19,38 @@ class RecipeSelectionTest {
     private final Map<Item, List<RecipeHolder<CraftingRecipe>>> index = new HashMap<>();
 
     @Test
+    void redstoneBlocksAndHatRecipeAreBothPublished(MinecraftServer server) {
+        add("minecraft:redstone_from_block", Items.REDSTONE, 9, Items.REDSTONE_BLOCK, 1);
+        add("minecraft:redstone_block", Items.REDSTONE_BLOCK, 1, Items.REDSTONE, 9);
+        // A leather helmet stands in for the modded hat's item identity.
+        add("reliquary:uncrafting/redstone", Items.REDSTONE, 6, Items.LEATHER_HELMET, 3);
+        var selection = selector(Set.of(Items.REDSTONE));
+        var choices = selection.alternatives(Items.REDSTONE, Set.of());
+        assertEquals(2, choices.size());
+        assertEquals("minecraft:redstone_from_block", choices.getFirst().recipe().id().identifier().toString());
+        assertTrue(selection.isConversion(choices.getFirst().recipe().value(), Items.REDSTONE));
+        assertFalse(selection.isConversion(choices.getLast().recipe().value(), Items.REDSTONE));
+    }
+
+    @Test
+    void stockConversionsAreRetainedEvenWithoutACraftingSource(MinecraftServer server) {
+        conversions(Items.IRON_INGOT, Items.IRON_BLOCK, Items.IRON_NUGGET);
+        var choices = selector(Set.of(Items.IRON_INGOT)).alternatives(Items.IRON_INGOT, Set.of());
+        assertEquals(2, choices.size());
+        assertTrue(choices.stream().allMatch(c -> selector(Set.of()).isConversion(c.recipe().value(), Items.IRON_INGOT)));
+    }
+
+    @Test
+    void conversionAlternativesStillRespectAncestorsAndBlacklist(MinecraftServer server) {
+        conversions(Items.IRON_INGOT, Items.IRON_BLOCK, Items.IRON_NUGGET);
+        var choices = selector(Set.of(Items.IRON_INGOT)).alternatives(Items.IRON_INGOT, Set.of(Items.IRON_BLOCK));
+        assertEquals(1, choices.size());
+        assertEquals("minecraft:ingot_from_nuggets", choices.getFirst().recipe().id().identifier().toString());
+        var selection = new RecipeSelection(index, Set.of(), r -> false, this::grid);
+        assertTrue(selection.alternatives(Items.IRON_INGOT, Set.of()).isEmpty());
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void vanillaRecipeIndexRecognizesSmeltedMetals(MinecraftServer server) throws Exception {
         var indexMethod = RecursivePatternGenerator.class.getDeclaredMethod("getRecipeIndex", RecipeManager.class);
@@ -110,7 +142,7 @@ class RecipeSelectionTest {
     }
 
     private void add(String id, Item output, int count, Item input, int inputCount) {
-        String[] rows = inputCount == 9 ? new String[]{"XXX", "XXX", "XXX"} : new String[]{"X"};
+        String[] rows = inputCount == 9 ? new String[]{"XXX", "XXX", "XXX"} : new String[]{"X".repeat(inputCount)};
         var pattern = ShapedRecipePattern.of(Map.of('X', Ingredient.of(input)), rows);
         CraftingRecipe recipe = new ShapedRecipe(null, null, pattern, new ItemStackTemplate(output, count));
         var holder = new RecipeHolder<>(ResourceKey.create(Registries.RECIPE, Identifier.parse(id)), recipe);

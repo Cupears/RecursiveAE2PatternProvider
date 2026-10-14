@@ -30,6 +30,45 @@ final class RecipeSelection {
 
     record Choice(RecipeHolder<CraftingRecipe> recipe, double cost) {}
 
+    List<Choice> alternatives(Item target, Set<Item> ancestors) {
+        Map<RecipeHolder<CraftingRecipe>, Choice> choices = new LinkedHashMap<>();
+        for (var choice : rank(target, ancestors)) choices.put(choice.recipe(), choice);
+        for (var recipe : index.getOrDefault(target, List.of())) {
+            try {
+                if (!allowed.test(recipe) || !isConversion(recipe.value(), target)) continue;
+                var output = recipe.value().assemble(net.minecraft.world.item.crafting.CraftingInput.EMPTY);
+                if (output.isEmpty() || !output.is(target)) continue;
+                double inputs = 1;
+                boolean cyclic = false;
+                for (var input : grid.apply(recipe.value())) {
+                    if (input.isEmpty()) continue;
+                    if (input.is(target) || ancestors.contains(input.getItem())) { cyclic = true; break; }
+                    inputs += input.getCount();
+                }
+                if (!cyclic) choices.putIfAbsent(recipe, new Choice(recipe, inputs / output.getCount()));
+            } catch (RuntimeException ignored) {
+                // An unreadable conversion is not a usable alternative.
+            }
+        }
+        var ordered = new ArrayList<>(choices.values());
+        // Common recipes first, but keep alternatives for AE2's stock-aware search.
+        ordered.sort(Comparator.comparingInt((Choice c) -> c.recipe().id().identifier().getNamespace()
+                        .equals(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(target).getNamespace()) ? 0 : 1)
+                .thenComparingDouble(Choice::cost)
+                .thenComparing(c -> c.recipe().id().identifier().toString()));
+        return ordered;
+    }
+
+    boolean isConversion(CraftingRecipe recipe, Item target) {
+        Item source = null;
+        for (var input : grid.apply(recipe)) {
+            if (input.isEmpty()) continue;
+            if (source != null && source != input.getItem()) return false;
+            source = input.getItem();
+        }
+        return source != null && source != target && reverses(source, target);
+    }
+
     List<Choice> rank(Item target, Set<Item> ancestors) {
         List<Choice> choices = new ArrayList<>();
         // A fresh budget per candidate makes results independent of recipe enumeration order.

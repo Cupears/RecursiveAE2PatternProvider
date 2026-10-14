@@ -32,8 +32,12 @@ public class Config {
             .define("recipeItem", "minecraft:iron_ingot");
 
     public static final ModConfigSpec.IntValue MAX_ALTERNATIVES_PER_ITEM = BUILDER
-            .comment("How many crafting recipes to generate per dependency item. 1 = only the best recipe (recommended). Higher values re-introduce alternative recipes that AE2 may pick instead of the expected one")
+            .comment("Maximum recipes per dependency in static selection mode (retainRecipeAlternatives = false)")
             .defineInRange("maxAlternativesPerItem", 1, 1, 64);
+
+    public static final ModConfigSpec.BooleanValue RETAIN_RECIPE_ALTERNATIVES = BUILDER
+            .comment("Publish valid recipe alternatives for AE2 to check against stock during each crafting calculation. Includes stored block/nugget conversions without expanding compression chains. Publishes at most 64 alternatives per item; when false, uses maxAlternativesPerItem and static selection.")
+            .define("retainRecipeAlternatives", true);
 
     public static final ModConfigSpec.BooleanValue SKIP_SELF_REFERENTIAL_RECIPES = BUILDER
             .comment("Ignore recipes that consume their own output (e.g. 'clear settings' / NBT-wipe recipes) when generating dependency patterns")

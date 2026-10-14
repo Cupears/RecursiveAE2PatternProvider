@@ -97,6 +97,7 @@ dependencies {
     testImplementation "net.neoforged:testframework:${neo_version}"
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     compileOnly "curse.maven:applied-energistics-2-223794:9022271"
+    testImplementation "curse.maven:applied-energistics-2-223794:9022271"
     runtimeOnly "curse.maven:applied-energistics-2-223794:9022271"
 
     implementation "curse.maven:titanium-287342:6443608"
