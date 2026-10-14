@@ -23,9 +23,6 @@ public abstract class CraftConfirmTableRendererMixin {
         for (var product : products) {
             lines.add(Component.translatable("gui.recursiveae2patternprovider.plan.produces", product.getDisplayName()).withColor(0xFF9A32));
         }
-        lines.add(Component.translatable("gui.recursiveae2patternprovider.plan.supply_directly").withColor(0xAAAAAA));
-        lines.add(Component.translatable("gui.recursiveae2patternprovider.plan.other_routes").withColor(0xAAAAAA));
-        lines.add(Component.translatable("gui.recursiveae2patternprovider.plan.other_missing").withColor(0xAAAAAA));
         cir.setReturnValue(lines);
     }
 }
