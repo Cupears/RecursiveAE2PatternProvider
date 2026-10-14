@@ -65,9 +65,15 @@ neoForge {
             sourceSet(sourceSets.main)
         }
     }
+
+    unitTest {
+        enable()
+        testedMod = mods."${mod_id}"
+    }
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
+
 
 configurations {
     runtimeClasspath.extendsFrom localRuntime
@@ -87,6 +93,9 @@ repositories {
 }
 
 dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testImplementation "net.neoforged:testframework:${neo_version}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     compileOnly "curse.maven:applied-energistics-2-223794:9022271"
     runtimeOnly "curse.maven:applied-energistics-2-223794:9022271"
 
@@ -115,6 +124,18 @@ dependencies {
     compileOnly "curse.maven:jei-238222:9068105"
 
     compileOnly "curse.maven:ae2-wcwt-1546802:8970875"
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+}
+
+// Keep unrelated optional integrations out of the recipe regression environment.
+configurations.testRuntimeClasspath {
+    ['titanium-287342', 'athena-841890', 'geckolib-388172', 'glodium-957920',
+     'ftlibrary-404465', 'ftpessential-410811', 'rhino-416294', 'kubejs-238086'].each {
+        exclude group: 'curse.maven', module: it
+    }
 }
 
 tasks.withType(ProcessResources).configureEach {

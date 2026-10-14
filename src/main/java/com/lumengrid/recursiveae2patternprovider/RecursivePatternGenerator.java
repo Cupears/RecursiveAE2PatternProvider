@@ -375,13 +375,16 @@ public final class RecursivePatternGenerator {
         if (recipe instanceof ShapedRecipe shapedRecipe) {
             int width = shapedRecipe.getWidth();
             int height = shapedRecipe.getHeight();
+            var slotsToIngredientIndex = recipe.placementInfo().slotsToIngredientIndex();
 
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    int ingredientIndex = y * width + x;
+                    // Placement ingredients omit empty slots; map each recipe slot
+                    // back to its ingredient to preserve holes in shaped recipes.
+                    int ingredientIndex = slotsToIngredientIndex.getInt(y * width + x);
                     int gridIndex = y * 3 + x;
 
-                    if (ingredientIndex < ingredients.size()) {
+                    if (ingredientIndex >= 0 && ingredientIndex < ingredients.size()) {
                         var ingredient = ingredients.get(ingredientIndex);
                         var first = ingredient.items().findFirst();
                         if (first.isPresent()) {
