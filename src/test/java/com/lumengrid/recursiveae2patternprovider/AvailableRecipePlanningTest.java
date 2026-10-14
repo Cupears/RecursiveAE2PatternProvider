@@ -32,6 +32,28 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(EphemeralTestServerProvider.class)
 class AvailableRecipePlanningTest {
     @Test
+    void partialPlanExplainsGeneratedSourceButDoesNotClaimItIsRequired(MinecraftServer server) throws Exception {
+        var hats = pattern(Items.LEATHER_HELMET, 3, 6);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.REDSTONE), 48)), Items.CLOCK, 1);
+        PlanExplanation.registerGenerated(hats);
+        var plan = calculate(List.of(root, hats), Map.of(Items.LEATHER_HELMET, 6L), Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertEquals(List.of(AEItemKey.of(Items.REDSTONE)), PlanExplanation.analyze(plan).get(AEItemKey.of(Items.LEATHER_HELMET)));
+        // Supplying the intermediate directly removes the source shortage.
+        var supplied = calculate(List.of(root, hats), Map.of(Items.REDSTONE, 48L), Items.CLOCK, 1);
+        assertFalse(supplied.simulation());
+        assertTrue(PlanExplanation.analyze(supplied).isEmpty());
+    }
+
+    @Test
+    void doesNotAnnotateManuallyEncodedPatterns(MinecraftServer server) throws Exception {
+        var manual = pattern(Items.DIRT, 1, 1);
+        var plan = calculate(List.of(manual), Map.of(), 1);
+        assertTrue(plan.simulation());
+        assertTrue(PlanExplanation.analyze(plan).isEmpty());
+    }
+
+    @Test
     void generatedPrimaryVariantsSupplyDrawerAndChestsFromOakLogs(MinecraftServer server) throws Exception {
         var planks = Ingredient.of(Items.DARK_OAK_PLANKS, Items.OAK_PLANKS);
         var chestRecipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of('P', planks), "PPP", "P P", "PPP"),

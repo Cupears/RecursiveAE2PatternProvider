@@ -315,6 +315,7 @@ public final class RecursivePatternGenerator {
                         AECraftingPattern aePattern = encodePattern(recipe, inputs, recipeOutput, parentPattern, ctx.level);
                         if (aePattern == null || aePattern.getOutputs() == null || aePattern.getOutputs().isEmpty()) continue;
                         ctx.generated.add(aePattern);
+                        PlanExplanation.registerGenerated(aePattern);
                         created++;
                         ctx.processedRecipes.add(recipe.id().toString());
 
