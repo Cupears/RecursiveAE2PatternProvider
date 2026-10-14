@@ -16,6 +16,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.crafting.ShapedRecipePattern;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
@@ -31,6 +32,80 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Exercise AE2's real calculation/backtracking with a small in-memory grid. */
 @ExtendWith(EphemeralTestServerProvider.class)
 class AvailableRecipePlanningTest {
+    @Test
+    void runtimeSubstitutionCanSpendLogsReservedForAnotherTask(MinecraftServer server) throws Exception {
+        var wood = processing(List.of(new GenericStack(AEItemKey.of(Items.CHERRY_LOG), 4)), Items.CHERRY_WOOD, 3);
+        var planks = flexibleCherryLogs(processing(List.of(new GenericStack(AEItemKey.of(Items.CHERRY_LOG), 1)), Items.CHERRY_PLANKS, 4));
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.CHERRY_WOOD), 3),
+                new GenericStack(AEItemKey.of(Items.CHERRY_PLANKS), 4)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, wood, planks), Map.of(Items.CHERRY_LOG, 4L, Items.CHERRY_WOOD, 1L), Items.CLOCK, 1);
+        assertFalse(plan.simulation());
+        var inventory = new appeng.crafting.inv.ListCraftingInventory(ignored -> {});
+        inventory.insert(AEItemKey.of(Items.CHERRY_LOG), 4, appeng.api.config.Actionable.MODULATE);
+        inventory.insert(AEItemKey.of(Items.CHERRY_WOOD), 1, appeng.api.config.Actionable.MODULATE);
+        assertNotNull(extract(planks, inventory));
+        assertNull(extract(wood, inventory), "Execution substituted a log that the valid plan reserved for the wood task");
+    }
+
+    @Test
+    void generatedWoodVariantsFinishRegardlessOfDependencyExecutionOrder(MinecraftServer server) throws Exception {
+        var recipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(
+                Map.of('L', Ingredient.of(Items.CHERRY_LOG, Items.CHERRY_WOOD)), "L"), new ItemStackTemplate(Items.CHERRY_PLANKS, 4));
+        var holder = new net.minecraft.world.item.crafting.RecipeHolder<CraftingRecipe>(net.minecraft.resources.ResourceKey.create(
+                net.minecraft.core.registries.Registries.RECIPE, net.minecraft.resources.Identifier.parse("test:cherry_planks")), recipe);
+        var original = new ItemStack[9]; Arrays.fill(original, ItemStack.EMPTY); original[0] = new ItemStack(Items.CHERRY_LOG);
+        List<IPatternDetails> patterns = new ArrayList<>();
+        for (var variant : RecipeInputVariants.generate(recipe, original, new ItemStack(Items.CHERRY_PLANKS, 4), null, 64)) {
+            var encoded = RecursivePatternGenerator.encodePatternStack(holder, variant, new ItemStack(Items.CHERRY_PLANKS, 4), null);
+            IPatternDetails pattern = processing(List.of(new GenericStack(AEItemKey.of(variant[0]), 1)), Items.CHERRY_PLANKS, 4);
+            if (encoded.get(appeng.api.ids.AEComponents.ENCODED_CRAFTING_PATTERN).canSubstitute()) pattern = flexibleCherryLogs(pattern);
+            patterns.add(pattern);
+        }
+        var wood = processing(List.of(new GenericStack(AEItemKey.of(Items.CHERRY_LOG), 4)), Items.CHERRY_WOOD, 3);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.CHERRY_WOOD), 3),
+                new GenericStack(AEItemKey.of(Items.CHERRY_PLANKS), 4)), Items.CLOCK, 1);
+        patterns.add(wood); patterns.add(root);
+        var plan = calculate(patterns, Map.of(Items.CHERRY_LOG, 4L, Items.CHERRY_WOOD, 1L), Items.CLOCK, 1);
+        assertFalse(plan.simulation());
+        var selectedPlanks = plan.patternTimes().keySet().stream().filter(p -> p.getOutputs().getFirst().what().equals(AEItemKey.of(Items.CHERRY_PLANKS))).findFirst().orElseThrow();
+        for (var order : List.of(List.of(selectedPlanks, wood), List.of(wood, selectedPlanks))) {
+            var inventory = new appeng.crafting.inv.ListCraftingInventory(ignored -> {});
+            inventory.insert(AEItemKey.of(Items.CHERRY_LOG), 4, appeng.api.config.Actionable.MODULATE);
+            inventory.insert(AEItemKey.of(Items.CHERRY_WOOD), 1, appeng.api.config.Actionable.MODULATE);
+            var pending = new ArrayList<>(order);
+            while (!pending.isEmpty()) {
+                boolean progress = false;
+                for (var iterator = pending.iterator(); iterator.hasNext();) {
+                    var pattern = iterator.next();
+                    if (extract(pattern, inventory) == null) continue;
+                    for (var output : pattern.getOutputs()) inventory.insert(output.what(), output.amount(), appeng.api.config.Actionable.MODULATE);
+                    iterator.remove(); progress = true;
+                }
+                assertTrue(progress, "A valid plan stalled because execution changed the ingredient source");
+            }
+            assertNotNull(extract(root, inventory));
+        }
+    }
+
+    private KeyCounter[] extract(IPatternDetails pattern, appeng.crafting.inv.ListCraftingInventory inventory) {
+        return appeng.crafting.execution.CraftingCpuHelper.extractPatternInputs(pattern, inventory, null, new KeyCounter(), new KeyCounter());
+    }
+
+    private IPatternDetails flexibleCherryLogs(IPatternDetails primary) {
+        var original = primary.getInputs()[0];
+        var options = new LinkedHashSet<AEKey>();
+        options.add(original.getPossibleInputs()[0].what());
+        options.add(AEItemKey.of(Items.CHERRY_LOG)); options.add(AEItemKey.of(Items.CHERRY_WOOD));
+        var flexible = new IPatternDetails.IInput() {
+            public GenericStack[] getPossibleInputs() { return options.stream().map(k -> new GenericStack(k, 1)).toArray(GenericStack[]::new); }
+            public long getMultiplier() { return 1; }
+            public boolean isValid(AEKey key, net.minecraft.world.level.Level level) { return options.contains(key); }
+            public AEKey getRemainingKey(AEKey key) { return null; }
+        };
+        return (IPatternDetails) Proxy.newProxyInstance(IPatternDetails.class.getClassLoader(), new Class<?>[]{IPatternDetails.class},
+                (proxy, method, args) -> method.getName().equals("getInputs") ? new IPatternDetails.IInput[]{flexible} : method.invoke(primary, args));
+    }
+
     @Test
     void partialPlanExplainsGeneratedSourceButDoesNotClaimItIsRequired(MinecraftServer server) throws Exception {
         var hats = pattern(Items.LEATHER_HELMET, 3, 6);

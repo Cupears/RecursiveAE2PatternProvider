@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(EphemeralTestServerProvider.class)
 class GeneratedIngredientAlternativesTest {
     @Test
-    void generatedPatternsEnableValidatedItemAlternatives(MinecraftServer server) {
+    void generatedVariantsBindExecutionToValidatedIngredients(MinecraftServer server) {
         var pattern = ShapedRecipePattern.of(Map.of('X', Ingredient.of(Items.OAK_LOG, Items.OAK_WOOD)), "X");
         CraftingRecipe recipe = new ShapedRecipe(null, null, pattern, new ItemStackTemplate(Items.OAK_PLANKS, 4));
         var holder = new RecipeHolder<>(ResourceKey.create(Registries.RECIPE, Identifier.parse("test:oak_planks")), recipe);
@@ -26,7 +26,7 @@ class GeneratedIngredientAlternativesTest {
         Arrays.fill(inputs, ItemStack.EMPTY);
         inputs[0] = new ItemStack(Items.OAK_LOG);
         var encoded = RecursivePatternGenerator.encodePatternStack(holder, inputs, new ItemStack(Items.OAK_PLANKS, 4), null);
-        assertTrue(encoded.get(AEComponents.ENCODED_CRAFTING_PATTERN).canSubstitute());
+        assertFalse(encoded.get(AEComponents.ENCODED_CRAFTING_PATTERN).canSubstitute());
         assertTrue(recipe.matches(CraftingInput.of(1, 1, List.of(new ItemStack(Items.OAK_WOOD))), null));
         assertTrue(ItemStack.matches(recipe.assemble(CraftingInput.of(1, 1, List.of(new ItemStack(Items.OAK_LOG)))),
                 recipe.assemble(CraftingInput.of(1, 1, List.of(new ItemStack(Items.OAK_WOOD))))));

@@ -357,7 +357,10 @@ public final class RecursivePatternGenerator {
             allowFluidSubstitutes = parentCraftingPattern.canSubstituteFluids();
         }
 
-        if (Config.GENERATED_INGREDIENT_ALTERNATIVES.get()) allowSubstitutes = true;
+        // Each validated primary variant is a separate planning choice. Keep
+        // execution bound to that choice: a runtime substitute can consume
+        // stock reserved for another dependency and deadlock an otherwise valid plan.
+        if (Config.GENERATED_INGREDIENT_ALTERNATIVES.get()) allowSubstitutes = false;
 
         AECraftingPattern.encode(patternStack, recipe, inputs, output, allowSubstitutes, allowFluidSubstitutes);
         return patternStack;

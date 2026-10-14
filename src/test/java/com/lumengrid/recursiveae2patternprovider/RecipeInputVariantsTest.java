@@ -14,6 +14,26 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(EphemeralTestServerProvider.class)
 class RecipeInputVariantsTest {
     @Test
+    void cherryDrawerShapeKeepsCherryPlanksWhileAllowingChestChoices(MinecraftServer server) {
+        // The installed Functional Storage cherry_4 recipe uses this shape;
+        // a vanilla barrel stands in for its output in the isolated fixture.
+        var recipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of(
+                'C', Ingredient.of(Items.CHEST, Items.TRAPPED_CHEST),
+                'P', Ingredient.of(Items.CHERRY_PLANKS)), "CPC", "PPP", "CPC"), new ItemStackTemplate(Items.BARREL, 4));
+        var original = new ItemStack[9];
+        Arrays.setAll(original, i -> new ItemStack(Items.CHERRY_PLANKS));
+        for (int slot : new int[]{0, 2, 6, 8}) original[slot] = new ItemStack(Items.TRAPPED_CHEST);
+        var variants = RecipeInputVariants.generate(recipe, original, new ItemStack(Items.BARREL, 4), null, 64);
+        assertEquals(2, variants.size());
+        for (var variant : variants) {
+            for (int slot : new int[]{1, 3, 4, 5, 7}) assertTrue(variant[slot].is(Items.CHERRY_PLANKS));
+            assertTrue(recipe.matches(CraftingInput.of(3, 3, Arrays.asList(variant)), null));
+            variant[1] = new ItemStack(Items.OAK_PLANKS);
+            assertFalse(recipe.matches(CraftingInput.of(3, 3, Arrays.asList(variant)), null));
+        }
+    }
+
+    @Test
     void genericParentGetsOakPrimaryEvenWhenAnotherWoodIsFirst(MinecraftServer server) {
         var ingredient = Ingredient.of(Items.DARK_OAK_PLANKS, Items.OAK_PLANKS);
         var pattern = ShapedRecipePattern.of(Map.of('P', ingredient), "PPP", "P P", "PPP");

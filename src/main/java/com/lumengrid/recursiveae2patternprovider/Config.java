@@ -40,7 +40,7 @@ public class Config {
             .define("retainRecipeAlternatives", true);
 
     public static final ModConfigSpec.BooleanValue GENERATED_INGREDIENT_ALTERNATIVES = BUILDER
-            .comment("Allow recipe-valid item alternatives in auto-generated patterns (e.g. interchangeable logs/planks). AE2 validates the recipe and unchanged output. Does not change manually encoded root patterns. When false, generated patterns inherit the parent substitution setting.")
+            .comment("Publish validated ingredient variants for generated patterns (e.g. accepted log/plank choices). Each variant uses exact item inputs during execution so substitutions cannot consume stock reserved for another dependency. Does not change manually encoded root patterns. When false, generated patterns inherit the parent substitution setting.")
             .define("generatedIngredientAlternatives", true);
 
     public static final ModConfigSpec.BooleanValue SKIP_SELF_REFERENTIAL_RECIPES = BUILDER
