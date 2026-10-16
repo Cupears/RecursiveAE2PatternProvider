@@ -1,5 +1,3 @@
-![Otter’s AE2 Recursive Patterns](docs/otter-patterns-banner.svg)
-
 # Otter’s AE2 Recursive Patterns
 
 **Recursive AE2 crafting, with fewer patterns to manage.**
