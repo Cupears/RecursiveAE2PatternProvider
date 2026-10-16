@@ -69,7 +69,6 @@ public abstract class CraftingEncodingPanelMixin {
                 CraftingTreeScreen.requestAndOpen(screen.getMenu().containerId);
             }
         });
-        this.inspectBtn.setHalfSize(true);
         this.inspectBtn.setDisableBackground(true);
     }
 
@@ -102,8 +101,9 @@ public abstract class CraftingEncodingPanelMixin {
         }
 
         if (this.inspectBtn != null && this.recursiveBtn != null) {
-            this.inspectBtn.setX(this.recursiveBtn.getX() + 10);
-            this.inspectBtn.setY(this.recursiveBtn.getY());
+            // Shift the icon up and left so it lines up with the button's hit area.
+            this.inspectBtn.setX(this.recursiveBtn.getX() + 8);
+            this.inspectBtn.setY(this.recursiveBtn.getY() - 2);
             // Only offer inspection once there is a recursive pattern in the encoded slot to walk.
             boolean hasPattern = this.panelScreen.getMenu() instanceof IInspectablePatternMenu menu
                     && !menu.recursiveAE2$getInspectPattern().isEmpty();

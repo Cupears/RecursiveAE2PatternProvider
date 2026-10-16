@@ -30,9 +30,15 @@ import java.util.Set;
  *
  * <p>Banned recipes are <strong>not traversed</strong>: their ingredients are not pulled into
  * the tree, and after the build any item only reachable through banned recipes is pruned.
- * That way, disabling a craft hides its children. Reciprocal / compression-loop recipes
- * (e.g. ingot&harr;nugget&harr;block) are suppressed by tracking ancestors, matching the
- * guards already used by {@link RecursivePatternGenerator}.
+ * That way, disabling a craft hides its (now orphaned) children.
+ *
+ * <p>Reciprocal / compression-loop recipes (e.g. ingot&harr;nugget&harr;block) are suppressed
+ * by tracking ancestors, matching the guards already used by {@link RecursivePatternGenerator}.
+ *
+ * <p>When an ingredient is already present at the same (or a shallower) column as the item
+ * that requires it, a deeper node instance is created at {@code parentDepth + 1} so every
+ * connector edge runs strictly left-to-right. This keeps the tree structure intact even when
+ * the same item is needed at multiple levels; "ban everywhere" handles those cross-level cases.
  */
 public final class CraftingTreeInspector {
 
@@ -47,9 +53,12 @@ public final class CraftingTreeInspector {
         final ItemStack icon;
         final List<Integer> recipeIndices = new ArrayList<>();
         boolean expanded;
+        /** Column depth (distance from the root output) this node is drawn at. */
+        int depth;
 
-        ItemBuilder(ItemStack icon) {
+        ItemBuilder(ItemStack icon, int depth) {
             this.icon = icon;
+            this.depth = depth;
         }
     }
 
@@ -66,7 +75,7 @@ public final class CraftingTreeInspector {
         final List<Integer> ingredientItemIndices = new ArrayList<>();
     }
 
-    /** One BFS step: an item to expand, with the items on the path from the root to it. */
+    /** One BFS step: an item node to expand, at a given depth. */
     private record Work(int itemIndex, Item item, String itemId, int depth, Set<Item> ancestors) {}
 
     public static CraftingTreeData build(IPatternDetails pattern, Level level, RecipeBans bans) {
@@ -88,13 +97,14 @@ public final class CraftingTreeInspector {
 
         List<ItemBuilder> items = new ArrayList<>();
         List<RecipeBuilder> recipes = new ArrayList<>();
-        Map<String, Integer> itemIndex = new LinkedHashMap<>();
+        // Item id -> list of node indices (an item may appear at several depths).
+        Map<String, List<Integer>> itemToNodes = new LinkedHashMap<>();
 
         var primary = pattern.getPrimaryOutput();
         if (!(primary.what() instanceof AEItemKey rootKey)) {
             return CraftingTreeData.EMPTY;
         }
-        int rootItemIdx = getOrCreateItem(rootKey.getItem(), rootKey.toStack(1), items, itemIndex);
+        int rootItemIdx = getOrCreateItemAtDepth(rootKey.getItem(), rootKey.toStack(1), 0, items, itemToNodes);
 
         // The root recipe is the encoded pattern itself: shown, but not bannable.
         RecipeBuilder rootRecipe = new RecipeBuilder();
@@ -123,7 +133,7 @@ public final class CraftingTreeInspector {
             if (ingredient == null) {
                 continue;
             }
-            int childIdx = getOrCreateItem(ingredient, new ItemStack(ingredient), items, itemIndex);
+            int childIdx = getOrCreateItemAtDepth(ingredient, new ItemStack(ingredient), 1, items, itemToNodes);
             if (!rootRecipe.ingredientItemIndices.contains(childIdx)) {
                 rootRecipe.ingredientItemIndices.add(childIdx);
             }
@@ -193,7 +203,9 @@ public final class CraftingTreeInspector {
                             continue;
                         }
                         Item ingItem = ing.getItem();
-                        int ingIdx = getOrCreateItem(ingItem, new ItemStack(ingItem), items, itemIndex);
+                        int desiredDepth = work.depth() + 1;
+                        int ingIdx = getOrCreateItemAtDepth(ingItem, new ItemStack(ingItem), desiredDepth,
+                                items, itemToNodes);
                         if (!rb.ingredientItemIndices.contains(ingIdx)) {
                             rb.ingredientItemIndices.add(ingIdx);
                         }
@@ -207,8 +219,8 @@ public final class CraftingTreeInspector {
                             Set<Item> ingAncestors = new HashSet<>(work.ancestors());
                             ingAncestors.add(work.item());
                             itemAncestors.put(ingIdx, ingAncestors);
-                            if (!items.get(ingIdx).expanded && work.depth() + 1 <= maxDepth) {
-                                queue.add(new Work(ingIdx, ingItem, idOf(ingItem), work.depth() + 1, ingAncestors));
+                            if (!items.get(ingIdx).expanded && desiredDepth <= maxDepth) {
+                                queue.add(new Work(ingIdx, ingItem, idOf(ingItem), desiredDepth, ingAncestors));
                             }
                         }
                     }
@@ -272,24 +284,35 @@ public final class CraftingTreeInspector {
         return toData(keptItems, keptRecipes);
     }
 
+    /**
+     * Return a node index for {@code item} at (or deeper than) {@code desiredDepth}. If an
+     * existing node for this item already sits at {@code desiredDepth} or deeper, it is reused.
+     * Otherwise a new node is created at {@code desiredDepth}. This is what pushes a dependency
+     * deeper when it would otherwise land in the same column as its parent.
+     */
+    private static int getOrCreateItemAtDepth(Item item, ItemStack icon, int desiredDepth,
+                                              List<ItemBuilder> items, Map<String, List<Integer>> itemToNodes) {
+        String id = idOf(item);
+        List<Integer> nodes = itemToNodes.get(id);
+        if (nodes != null) {
+            for (int idx : nodes) {
+                if (items.get(idx).depth >= desiredDepth) {
+                    return idx;
+                }
+            }
+        }
+        int idx = items.size();
+        items.add(new ItemBuilder(icon.copy(), desiredDepth));
+        itemToNodes.computeIfAbsent(id, k -> new ArrayList<>()).add(idx);
+        return idx;
+    }
+
     private static int effectiveDepth() {
         int configured = Config.RECURSION_DEPTH.get();
         if (configured <= 0) {
             return DEFAULT_DEPTH;
         }
         return Math.min(configured, DEPTH_CAP);
-    }
-
-    private static int getOrCreateItem(Item item, ItemStack icon, List<ItemBuilder> items, Map<String, Integer> itemIndex) {
-        String id = idOf(item);
-        Integer existing = itemIndex.get(id);
-        if (existing != null) {
-            return existing;
-        }
-        int idx = items.size();
-        items.add(new ItemBuilder(icon.copy()));
-        itemIndex.put(id, idx);
-        return idx;
     }
 
     private static List<ItemStack> rootGrid(IPatternDetails pattern) {

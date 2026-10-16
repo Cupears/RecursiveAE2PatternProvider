@@ -49,7 +49,6 @@ public class CraftingTreeScreen extends Screen {
     private static final double ZOOM_MIN = 0.5;
     private static final double ZOOM_MAX = 2.0;
     private static final double ZOOM_STEP_SCROLL = 0.10;
-    private static final double ZOOM_STEP_BUTTON = 0.25;
 
     // Colors (ARGB).
     private static final int COL_PANEL = 0xC0101014;
@@ -111,23 +110,6 @@ public class CraftingTreeScreen extends Screen {
         addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose())
                 .bounds(this.width - w - 8, this.height - 28, w, 20)
                 .build());
-
-        // Zoom controls (top right), laid out right-to-left.
-        int right = this.width - 8;
-        int btnW = 22, btnH = 18, gap = 6;
-        int resetW = 44;
-        int resetX = right - resetW;
-        int minusX = resetX - gap - btnW;
-        int plusX = minusX - gap - btnW;
-        addRenderableWidget(Button.builder(Component.literal("+"),
-                b -> zoomAt(ZOOM_STEP_BUTTON, this.width / 2, this.height / 2))
-                .bounds(plusX, 6, btnW, btnH).build());
-        addRenderableWidget(Button.builder(Component.literal("−"),
-                b -> zoomAt(-ZOOM_STEP_BUTTON, this.width / 2, this.height / 2))
-                .bounds(minusX, 6, btnW, btnH).build());
-        addRenderableWidget(Button.builder(Component.literal("Reset"),
-                b -> setZoom(1.0, this.width / 2, this.height / 2))
-                .bounds(resetX, 6, resetW, btnH).build());
     }
 
     // ----- zoom -----------------------------------------------------------------------------------
@@ -220,7 +202,6 @@ public class CraftingTreeScreen extends Screen {
         // Chrome (unscaled screen space).
         g.fill(0, 0, this.width, 22, COL_PANEL);
         g.text(this.font, Component.literal("Crafting Tree Inspector").withStyle(ChatFormatting.WHITE), 8, 7, 0xFFFFFFFF);
-        drawZoomLabel(g, cx, cy);
         drawLegend(g);
 
         // Convert screen mouse to world coords for hit testing.
@@ -257,19 +238,6 @@ public class CraftingTreeScreen extends Screen {
         drawHoverTooltip(g, mouseX, mouseY);
     }
 
-    private void drawZoomLabel(GuiGraphicsExtractor g, int cx, int cy) {
-        String label = String.format("Zoom %d%%", (int) Math.round(zoom * 100));
-        int labelW = this.font.width(label);
-        int right = this.width - 8;
-        int btnW = 22, btnH = 18, gap = 6;
-        int resetW = 44;
-        int resetX = right - resetW;
-        int labelX = resetX - gap - labelW;
-        int labelY = 7;
-        g.fill(labelX - 2, 3, labelX + labelW + 2, 20, COL_PANEL);
-        g.text(this.font, Component.literal(label), labelX, labelY, 0xFFBBBBBB);
-    }
-
     private void drawLegend(GuiGraphicsExtractor g) {
         int y = this.height - 26;
         g.fill(0, y - 2, this.width, this.height, COL_PANEL);
@@ -281,8 +249,17 @@ public class CraftingTreeScreen extends Screen {
     // ----- rendering ------------------------------------------------------------------------------
 
     private void drawConnectors(GuiGraphicsExtractor g) {
+        // Only draw connector lines for meaningful edges: the active (chosen) recipe per item
+        // and banned (disabled) edges. Inactive alternatives keep their card (so they can be
+        // banned/switched) but no line, which keeps the tree from turning into a spiderweb of
+        // crossing connectors between vertically neighbouring or deeply nested elements.
         for (int recipeIdx = 0; recipeIdx < tree.recipes().size(); recipeIdx++) {
             var recipe = tree.recipes().get(recipeIdx);
+            // Draw edges for the active recipe, banned edges, and the root pattern's own edges
+            // (so the root-to-first-level lines are visible).
+            if (!recipe.active() && !recipe.banned() && !recipe.root()) {
+                continue;
+            }
             int[] card = cardRect(recipeIdx);
             if (card == null) {
                 continue;
@@ -296,8 +273,13 @@ public class CraftingTreeScreen extends Screen {
                 }
                 int endX = r[0];
                 int endY = r[1] + HEADER_H / 2;
-                int color = recipe.banned() ? COL_BANNED : (recipe.active() ? COL_ACTIVE : COL_CONNECTOR);
-                drawElbow(g, startX, startY, endX, endY, color);
+                // Center the vertical drop in the gap between parent and child columns, then
+                // stagger it slightly per line so multiple edges between the same two columns
+                // don't overlap into a single thick vertical wall.
+                int gap = endX - startX;
+                int elbowX = startX + gap / 2 + ((recipeIdx * 7) % 5) - 2;
+                int color = recipe.banned() ? COL_BANNED : COL_ACTIVE;
+                drawElbow(g, startX, startY, endX, endY, elbowX, color);
             }
         }
     }
@@ -318,11 +300,12 @@ public class CraftingTreeScreen extends Screen {
         return null;
     }
 
-    private void drawElbow(GuiGraphicsExtractor g, int x0, int y0, int x1, int y1, int color) {
-        int midX = (x0 + x1) / 2;
-        g.fill(Math.min(x0, midX), y0, Math.max(x0, midX) + 1, y0 + 1, color);
-        g.fill(midX, Math.min(y0, y1), midX + 1, Math.max(y0, y1) + 1, color);
-        g.fill(Math.min(midX, x1), y1, Math.max(x0, x1) + 1, y1 + 1, color);
+    private void drawElbow(GuiGraphicsExtractor g, int x0, int y0, int x1, int y1, int elbowX, int color) {
+        // Clamp the elbow into the gap between parent and child so it never touches a node.
+        elbowX = Math.min(Math.max(elbowX, x0 + 1), x1 - 1);
+        g.fill(Math.min(x0, elbowX), y0, Math.max(x0, elbowX) + 1, y0 + 1, color);
+        g.fill(elbowX, Math.min(y0, y1), elbowX + 1, Math.max(y0, y1) + 1, color);
+        g.fill(Math.min(elbowX, x1), y1, Math.max(elbowX, x1) + 1, y1 + 1, color);
     }
 
     private boolean drawItemNode(GuiGraphicsExtractor g, int item, int x, int y, int w, int h,
