@@ -128,7 +128,7 @@ dependencies {
 }
 
 tasks.named('jar', Jar) {
-    from(project.files('LICENSE.txt', 'README.md', 'TEMPLATE_LICENSE.txt')) {
+    from(project.files('README.md')) {
         into 'META-INF'
     }
 }

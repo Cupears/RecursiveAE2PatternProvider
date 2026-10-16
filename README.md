@@ -95,4 +95,4 @@ On Windows, use `gradlew.bat build`. The installable JAR is written to `build/li
 
 Original mod by **Lumengrid (Lumengrid89)**. I maintain this independent fork as **Cupears**; my changes are described above and in [CHANGELOG.md](CHANGELOG.md). This fork is not an official upstream release. My individual contributions remain available as separate upstream pull requests.
 
-I keep this fork under [CC BY 4.0](LICENSE.txt). The NeoForge MDK template retains its separate [MIT license](TEMPLATE_LICENSE.txt).
+I keep this fork under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The NeoForge MDK template retains its separate [MIT license](src/main/resources/META-INF/MDK-MIT.txt).
