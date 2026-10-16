@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.1.0.jar` from Releases.
+1. Download `otter-patterns-1.1.1.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. Put the JAR in the client and server `mods` folders, or just the client folder for single-player.
 4. Remove the older Recursive AE2 Pattern Provider JAR from `mods`, then launch again.
@@ -31,20 +31,14 @@ Existing recursive flags and the config filename remain compatible.
 
 ## Use it
 
-Encode your final crafting recipe in an AE2 Pattern Encoding Terminal and enable its recursive toggle. Put that pattern in a connected Pattern Provider with access to Molecular Assemblers. The provider generates eligible crafting dependencies, such as planks and sticks, for AE2 to plan and execute.
+Encode your final crafting recipe in an AE2 Pattern Encoding Terminal. New encoding sessions start with recursion enabled by default; you can switch it off using the terminal toggle. Put the pattern in a connected Pattern Provider with access to Molecular Assemblers. The provider generates eligible crafting dependencies, such as planks and sticks, for AE2 to plan and execute.
 
 You can also combine an encoded pattern with an iron ingot to mark it recursive. The required item is configurable. Craft a recursive pattern by itself to remove the recursive flag.
 
-To start new encoding sessions in recursive mode, add this to `config/recursiveae2patternprovider-common.toml`:
-
-```toml
-defaultRecursiveMode = true
-```
-
 > [!TIP]
-> Recursive mode starts off by default. Set `defaultRecursiveMode = true` to start new encoding sessions with it enabled. In multiplayer, set this on the server; you can still switch it off in the terminal.
+> Recursive mode is on by default. No config edit is needed for a fresh installation. If an older config already has `defaultRecursiveMode = false`, change it to `true` in `config/recursiveae2patternprovider-common.toml`. In multiplayer, the server controls this default.
 
-Existing stored patterns are not converted automatically.
+To start with recursion off instead, set `defaultRecursiveMode = false`. Existing stored patterns are not converted automatically.
 
 ## What I changed
 
@@ -61,7 +55,7 @@ The common config lives at `config/recursiveae2patternprovider-common.toml`.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `defaultRecursiveMode` | `false` | Start new encoding sessions with recursion enabled. |
+| `defaultRecursiveMode` | `true` | Start new encoding sessions with recursion enabled. |
 | `recursionDepth` | `-1` | Unlimited depth; `0` disables generation, positive values limit depth. |
 | `retainRecipeAlternatives` | `true` | Let AE2 consider bounded alternative recipe routes. |
 | `generatedIngredientAlternatives` | `true` | Generate valid material variants with exact execution inputs. |

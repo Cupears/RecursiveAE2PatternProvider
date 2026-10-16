@@ -18,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(EphemeralTestServerProvider.class)
 class RecursiveModeSyncTest {
     @Test
-    void existingInstallsRemainOptIn(MinecraftServer server) {
-        assertEquals(false, Config.DEFAULT_RECURSIVE_MODE.getDefault());
+    void newEncodingSessionsDefaultToRecursive(MinecraftServer server) {
+        assertEquals(true, Config.DEFAULT_RECURSIVE_MODE.getDefault());
     }
 
     @Test
