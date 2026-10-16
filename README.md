@@ -21,11 +21,11 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 1. Download `otter-patterns-1.1.1.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
-3. Put the JAR in the client and server `mods` folders, or just the client folder for single-player.
-4. Remove the older Recursive AE2 Pattern Provider JAR from `mods`, then launch again.
+3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
+4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.
 
 > [!WARNING]
-> Install only one copy. I retain the original mod ID, `recursiveae2patternprovider`, so this replaces Recursive AE2 Pattern Provider. Remove the older JAR from `mods` before launching.
+> If the original **Recursive AE2 Pattern Provider** is installed, remove its `recursiveae2patternprovider-*.jar` too. My fork uses the same mod ID, so the original and this fork cannot be installed together. Keep only the newest Otter JAR in `mods`.
 
 Existing recursive flags and the config filename remain compatible.
 
