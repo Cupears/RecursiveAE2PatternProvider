@@ -42,8 +42,22 @@ public final class RecipeBans {
         return itemId + EDGE_SEPARATOR + recipeId;
     }
 
+    /** Edge key for a specific item-node instance: {@code item|recipe|nodeIndex}. */
+    public static String edgeKey(String itemId, String recipeId, int itemNodeIndex) {
+        return itemId + EDGE_SEPARATOR + recipeId + EDGE_SEPARATOR + itemNodeIndex;
+    }
+
     public boolean isBanned(String itemId, String recipeId) {
         return recipes.contains(recipeId) || edges.contains(edgeKey(itemId, recipeId));
+    }
+
+    /**
+     * Whether this exact {@code (item, recipe, node)} edge is banned. A per-item ban
+     * ({@code item|recipe}) applies to all instances, so it also counts as banned here.
+     */
+    public boolean isBanned(String itemId, String recipeId, int itemNodeIndex) {
+        return isBanned(itemId, recipeId)
+                || edges.contains(edgeKey(itemId, recipeId, itemNodeIndex));
     }
 
     public boolean isRecipeBannedEverywhere(String recipeId) {
@@ -58,6 +72,16 @@ public final class RecipeBans {
     public RecipeBans toggledEdge(String itemId, String recipeId) {
         Set<String> next = new LinkedHashSet<>(edges);
         String key = edgeKey(itemId, recipeId);
+        if (!next.remove(key)) {
+            next.add(key);
+        }
+        return new RecipeBans(next, recipes);
+    }
+
+    /** Flip a single {@code (item, recipe, node)} edge, returning an updated copy. */
+    public RecipeBans toggledEdge(String itemId, String recipeId, int itemNodeIndex) {
+        Set<String> next = new LinkedHashSet<>(edges);
+        String key = edgeKey(itemId, recipeId, itemNodeIndex);
         if (!next.remove(key)) {
             next.add(key);
         }

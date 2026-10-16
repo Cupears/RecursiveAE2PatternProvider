@@ -16,6 +16,7 @@ import net.minecraft.world.item.ItemStack;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +44,7 @@ public class CraftingTreeScreen extends Screen {
     private static final int HEADER_H = 20;
     private static final int NODE_PAD = 4;
     private static final int COL_GAP = 58;
-    private static final int ROW_GAP = 14;
+    private static final int ROW_GAP = 16;
 
     // Zoom.
     private static final double ZOOM_MIN = 0.5;
@@ -143,46 +144,85 @@ public class CraftingTreeScreen extends Screen {
             return;
         }
 
-        // Column = shortest distance (in recipe steps) from the root output.
-        int[] depth = new int[tree.items().size()];
-        java.util.Arrays.fill(depth, Integer.MAX_VALUE);
-        depth[0] = 0;
-        var queue = new java.util.ArrayDeque<Integer>();
-        queue.add(0);
-        while (!queue.isEmpty()) {
-            int item = queue.poll();
-            for (int recipeIdx : tree.items().get(item).recipeIndices()) {
-                var recipe = tree.recipes().get(recipeIdx);
-                for (int ing : recipe.ingredientItemIndices()) {
-                    if (depth[item] + 1 < depth[ing]) {
-                        depth[ing] = depth[item] + 1;
-                        queue.add(ing);
-                    }
-                }
-            }
-        }
-
-        // Group items by column, preserving item order for a stable vertical stack.
+        // Column = inspector-assigned depth (push-deeper ensures every edge runs strictly right).
         Map<Integer, List<Integer>> columns = new java.util.TreeMap<>();
         int maxDepth = 0;
         for (int i = 0; i < tree.items().size(); i++) {
-            int d = depth[i] == Integer.MAX_VALUE ? 0 : depth[i];
+            int d = tree.items().get(i).depth();
             columns.computeIfAbsent(d, k -> new ArrayList<>()).add(i);
             maxDepth = Math.max(maxDepth, d);
         }
 
-        for (var entry : columns.entrySet()) {
-            int col = entry.getKey();
+        // Layout columns left to right. Within each column, sort items by their parents'
+        // average vertical position so children cluster near the items that need them.
+        // Dynamic whitespace is inserted between items whose ideal positions are far apart,
+        // so children can align with their parents without cramping unrelated items together.
+        Map<Integer, Integer> itemY = new HashMap<>();
+        for (int col = 0; col <= maxDepth; col++) {
+            List<Integer> items = new ArrayList<>(columns.getOrDefault(col, List.of()));
+            if (col > 0) {
+                items.sort(Comparator.comparingInt(i -> parentAvgY(i, itemY)));
+            }
             int x = col * (CARD_W + COL_GAP);
             int y = 0;
-            for (int item : entry.getValue()) {
+            for (int item : items) {
                 int recipeCount = tree.items().get(item).recipeIndices().size();
                 int h = HEADER_H + recipeCount * CARD_H + NODE_PAD * 2;
                 int w = CARD_W + NODE_PAD * 2;
-                itemRects.put(item, new int[]{x, y, w, h});
-                y += h + ROW_GAP;
+
+                // Try to center this item on its ideal Y (average parent position). If the
+                // ideal Y is far below the current cursor, dynamic whitespace opens up
+                // between this item and the previous one.
+                int idealY = parentAvgY(item, itemY);
+                int targetY;
+                if (idealY != Integer.MAX_VALUE) {
+                    targetY = Math.max(y, idealY - h / 2);
+                } else {
+                    targetY = y;
+                }
+
+                itemRects.put(item, new int[]{x, targetY, w, h});
+                // Store center Y so children align with parent centers, not parent tops.
+                itemY.put(item, targetY + h / 2);
+                y = targetY + h + ROW_GAP;
             }
         }
+    }
+
+    /** Average Y of this item's producers (items whose recipes use it as an ingredient), or {@code Integer.MAX_VALUE} if unknown. */
+    private int parentAvgY(int item, Map<Integer, Integer> itemY) {
+        int totalY = 0;
+        int count = 0;
+        for (int recipeIdx = 0; recipeIdx < tree.recipes().size(); recipeIdx++) {
+            var recipe = tree.recipes().get(recipeIdx);
+            if (!recipe.active() && !recipe.banned() && !recipe.root()) {
+                continue;
+            }
+            if (!recipe.ingredientItemIndices().contains(item)) {
+                continue;
+            }
+            int producerItem = findProducerItem(recipeIdx);
+            if (producerItem != -1 && itemY.containsKey(producerItem)) {
+                totalY += itemY.get(producerItem);
+                count++;
+            }
+        }
+        return count > 0 ? totalY / count : Integer.MAX_VALUE;
+    }
+
+    /** Find the item node that produces the recipe at {@code recipeIndex}. */
+    private int findProducerItem(int recipeIndex) {
+        for (int i = 0; i < tree.items().size(); i++) {
+            if (tree.items().get(i).recipeIndices().contains(recipeIndex)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Column index (depth) of the item node at {@code itemIndex}. */
+    private int itemDepth(int itemIndex) {
+        return tree.items().get(itemIndex).depth();
     }
 
     // ----- per-frame render state -----------------------------------------------------------------
@@ -253,10 +293,11 @@ public class CraftingTreeScreen extends Screen {
         // and banned (disabled) edges. Inactive alternatives keep their card (so they can be
         // banned/switched) but no line, which keeps the tree from turning into a spiderweb of
         // crossing connectors between vertically neighbouring or deeply nested elements.
+
+        // Count edges per column pair so we can spread elbows evenly across the gap.
+        Map<String, Integer> totalPerColumnPair = new HashMap<>();
         for (int recipeIdx = 0; recipeIdx < tree.recipes().size(); recipeIdx++) {
             var recipe = tree.recipes().get(recipeIdx);
-            // Draw edges for the active recipe, banned edges, and the root pattern's own edges
-            // (so the root-to-first-level lines are visible).
             if (!recipe.active() && !recipe.banned() && !recipe.root()) {
                 continue;
             }
@@ -264,6 +305,40 @@ public class CraftingTreeScreen extends Screen {
             if (card == null) {
                 continue;
             }
+            int parentItem = findProducerItem(recipeIdx);
+            if (parentItem == -1) {
+                continue;
+            }
+            int parentCol = itemDepth(parentItem);
+            for (int ing : recipe.ingredientItemIndices()) {
+                int[] r = itemRects.get(ing);
+                if (r == null) {
+                    continue;
+                }
+                int childCol = itemDepth(ing);
+                if (childCol <= parentCol) {
+                    continue;
+                }
+                String key = parentCol + "," + childCol;
+                totalPerColumnPair.merge(key, 1, Integer::sum);
+            }
+        }
+
+        Map<String, Integer> drawnPerColumnPair = new HashMap<>();
+        for (int recipeIdx = 0; recipeIdx < tree.recipes().size(); recipeIdx++) {
+            var recipe = tree.recipes().get(recipeIdx);
+            if (!recipe.active() && !recipe.banned() && !recipe.root()) {
+                continue;
+            }
+            int[] card = cardRect(recipeIdx);
+            if (card == null) {
+                continue;
+            }
+            int parentItem = findProducerItem(recipeIdx);
+            if (parentItem == -1) {
+                continue;
+            }
+            int parentCol = itemDepth(parentItem);
             int startX = card[0] + card[2];
             int startY = card[1] + card[3] / 2;
             for (int ing : recipe.ingredientItemIndices()) {
@@ -271,14 +346,24 @@ public class CraftingTreeScreen extends Screen {
                 if (r == null) {
                     continue;
                 }
+                int childCol = itemDepth(ing);
+                if (childCol <= parentCol) {
+                    continue;
+                }
                 int endX = r[0];
                 int endY = r[1] + HEADER_H / 2;
-                // Center the vertical drop in the gap between parent and child columns, then
-                // stagger it slightly per line so multiple edges between the same two columns
-                // don't overlap into a single thick vertical wall.
-                int gap = endX - startX;
-                int elbowX = startX + gap / 2 + ((recipeIdx * 7) % 5) - 2;
                 int color = recipe.banned() ? COL_BANNED : COL_ACTIVE;
+
+                // Spread elbows evenly across the gap between columns. Multiple edges between
+                // the same two columns get distinct horizontal positions so they don't stack
+                // into a thick wall.
+                String key = parentCol + "," + childCol;
+                int total = totalPerColumnPair.get(key);
+                int drawn = drawnPerColumnPair.merge(key, 1, Integer::sum);
+                int gap = endX - startX;
+                int spread = Math.min(gap / 3, 30);
+                int offset = total <= 1 ? 0 : -spread + (drawn - 1) * (2 * spread) / (total - 1);
+                int elbowX = startX + gap / 2 + offset;
                 drawElbow(g, startX, startY, endX, endY, elbowX, color);
             }
         }
@@ -518,7 +603,8 @@ public class CraftingTreeScreen extends Screen {
         if (connection == null) {
             return;
         }
-        connection.send(new ToggleRecipeBanC2SPacket(menuId, recipe.outputItemId(), recipe.recipeId(), everywhere));
+        connection.send(new ToggleRecipeBanC2SPacket(menuId, recipe.outputItemId(), recipe.recipeId(),
+                recipe.producingItemIndex(), everywhere));
         // The server resends the recomputed tree after applying the toggle.
     }
 

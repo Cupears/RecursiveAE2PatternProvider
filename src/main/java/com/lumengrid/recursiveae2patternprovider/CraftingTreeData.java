@@ -18,13 +18,16 @@ public record CraftingTreeData(List<ItemNode> items, List<RecipeNode> recipes) {
     public static final CraftingTreeData EMPTY = new CraftingTreeData(List.of(), List.of());
 
     /** An item in the tree and the recipe nodes that can produce it. */
-    public record ItemNode(ItemStack icon, List<Integer> recipeIndices) {}
+    public record ItemNode(ItemStack icon, List<Integer> recipeIndices, int depth) {}
 
     /**
      * One way to craft an item.
      *
      * @param recipeId          recipe resource id, or empty for the non-bannable root pattern
      * @param outputItemId      item id this recipe produces (the ban key's item part)
+     * @param producingItemIndex index of the {@link ItemNode} this recipe produces, so bans
+     *                           can target a specific instance when the same item appears at
+     *                           multiple depths
      * @param grid              nine stacks describing the crafting grid (empties preserved)
      * @param output            the produced stack, including count
      * @param banned            this exact {@code (item, recipe)} edge is banned
@@ -33,7 +36,8 @@ public record CraftingTreeData(List<ItemNode> items, List<RecipeNode> recipes) {
      * @param root              the pattern's own recipe (shown but not bannable)
      * @param ingredientItemIndices item-node indices for this recipe's ingredients
      */
-    public record RecipeNode(String recipeId, String outputItemId, List<ItemStack> grid, ItemStack output,
+    public record RecipeNode(String recipeId, String outputItemId, int producingItemIndex,
+                             List<ItemStack> grid, ItemStack output,
                              boolean banned, boolean bannedEverywhere, boolean active, boolean root,
                              List<Integer> ingredientItemIndices) {}
 

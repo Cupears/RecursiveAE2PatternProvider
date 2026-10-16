@@ -103,7 +103,7 @@ public abstract class CraftingEncodingPanelMixin {
         if (this.inspectBtn != null && this.recursiveBtn != null) {
             // Shift the icon up and left so it lines up with the button's hit area.
             this.inspectBtn.setX(this.recursiveBtn.getX() + 8);
-            this.inspectBtn.setY(this.recursiveBtn.getY() - 2);
+            this.inspectBtn.setY(this.recursiveBtn.getY() - 4);
             // Only offer inspection once there is a recursive pattern in the encoded slot to walk.
             boolean hasPattern = this.panelScreen.getMenu() instanceof IInspectablePatternMenu menu
                     && !menu.recursiveAE2$getInspectPattern().isEmpty();

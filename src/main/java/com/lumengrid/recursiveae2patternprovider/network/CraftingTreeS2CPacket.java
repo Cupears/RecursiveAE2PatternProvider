@@ -30,13 +30,15 @@ public record CraftingTreeS2CPacket(int menuId, CraftingTreeData tree) implement
             for (int i = 0; i < itemCount; i++) {
                 ItemStack icon = ItemStack.OPTIONAL_STREAM_CODEC.decode(buf);
                 List<Integer> recipeIndices = readInts(buf);
-                items.add(new CraftingTreeData.ItemNode(icon, recipeIndices));
+                int depth = buf.readVarInt();
+                items.add(new CraftingTreeData.ItemNode(icon, recipeIndices, depth));
             }
             int recipeCount = bounded(buf.readVarInt());
             List<CraftingTreeData.RecipeNode> recipes = new ArrayList<>(recipeCount);
             for (int i = 0; i < recipeCount; i++) {
                 String recipeId = buf.readUtf();
                 String outputItemId = buf.readUtf();
+                int producingItemIndex = buf.readVarInt();
                 List<ItemStack> grid = new ArrayList<>(9);
                 for (int s = 0; s < 9; s++) {
                     grid.add(ItemStack.OPTIONAL_STREAM_CODEC.decode(buf));
@@ -47,7 +49,7 @@ public record CraftingTreeS2CPacket(int menuId, CraftingTreeData tree) implement
                 boolean active = buf.readBoolean();
                 boolean root = buf.readBoolean();
                 List<Integer> ingredients = readInts(buf);
-                recipes.add(new CraftingTreeData.RecipeNode(recipeId, outputItemId, grid, output,
+                recipes.add(new CraftingTreeData.RecipeNode(recipeId, outputItemId, producingItemIndex, grid, output,
                         banned, bannedEverywhere, active, root, ingredients));
             }
             return new CraftingTreeS2CPacket(menuId, new CraftingTreeData(items, recipes));
@@ -61,11 +63,13 @@ public record CraftingTreeS2CPacket(int menuId, CraftingTreeData tree) implement
             for (var item : tree.items()) {
                 ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, item.icon());
                 writeInts(buf, item.recipeIndices());
+                buf.writeVarInt(item.depth());
             }
             buf.writeVarInt(tree.recipes().size());
             for (var recipe : tree.recipes()) {
                 buf.writeUtf(recipe.recipeId());
                 buf.writeUtf(recipe.outputItemId());
+                buf.writeVarInt(recipe.producingItemIndex());
                 for (int s = 0; s < 9; s++) {
                     ItemStack stack = s < recipe.grid().size() ? recipe.grid().get(s) : ItemStack.EMPTY;
                     ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, stack);

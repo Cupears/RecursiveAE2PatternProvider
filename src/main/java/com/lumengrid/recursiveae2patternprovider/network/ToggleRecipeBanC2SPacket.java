@@ -18,7 +18,8 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /** Client -> server: toggle a recipe ban on the pattern being inspected, then resend the tree. */
-public record ToggleRecipeBanC2SPacket(int menuId, String itemId, String recipeId, boolean everywhere)
+public record ToggleRecipeBanC2SPacket(int menuId, String itemId, String recipeId, int itemNodeIndex,
+                                       boolean everywhere)
         implements CustomPacketPayload {
 
     public static final Type<ToggleRecipeBanC2SPacket> TYPE = new Type<>(
@@ -28,6 +29,7 @@ public record ToggleRecipeBanC2SPacket(int menuId, String itemId, String recipeI
             ByteBufCodecs.VAR_INT, ToggleRecipeBanC2SPacket::menuId,
             ByteBufCodecs.STRING_UTF8, ToggleRecipeBanC2SPacket::itemId,
             ByteBufCodecs.STRING_UTF8, ToggleRecipeBanC2SPacket::recipeId,
+            ByteBufCodecs.VAR_INT, ToggleRecipeBanC2SPacket::itemNodeIndex,
             ByteBufCodecs.BOOL, ToggleRecipeBanC2SPacket::everywhere,
             ToggleRecipeBanC2SPacket::new);
 
@@ -52,14 +54,14 @@ public record ToggleRecipeBanC2SPacket(int menuId, String itemId, String recipeI
             }
 
             RecipeBans current = PatternUtil.getBans(pattern);
-            boolean wasBanned = current.isBanned(packet.itemId(), packet.recipeId());
+            boolean wasBanned = current.isBanned(packet.itemId(), packet.recipeId(), packet.itemNodeIndex());
             RecipeBans updated = packet.everywhere()
                     ? current.toggledRecipe(packet.recipeId())
-                    : current.toggledEdge(packet.itemId(), packet.recipeId());
+                    : current.toggledEdge(packet.itemId(), packet.recipeId(), packet.itemNodeIndex());
 
             // "An unbanned option may be selected": never let the player ban the last
             // remaining recipe for an item. Only guard when a ban is being turned on.
-            boolean nowBanned = updated.isBanned(packet.itemId(), packet.recipeId());
+            boolean nowBanned = updated.isBanned(packet.itemId(), packet.recipeId(), packet.itemNodeIndex());
             if (nowBanned && !wasBanned && !leavesAnUnbannedRecipe(player, packet.itemId(), updated)) {
                 // Reject the toggle; resend the unchanged tree so the client re-syncs.
                 RequestCraftingTreeC2SPacket.sendTreeTo(player, packet.menuId());

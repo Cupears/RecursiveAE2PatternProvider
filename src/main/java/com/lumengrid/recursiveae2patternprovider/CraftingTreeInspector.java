@@ -66,6 +66,7 @@ public final class CraftingTreeInspector {
         String recipeId;
         String outputItemId;
         int outputItemIndex;
+        int producingItemIndex;
         List<ItemStack> grid;
         ItemStack output;
         boolean banned;
@@ -111,6 +112,7 @@ public final class CraftingTreeInspector {
         rootRecipe.recipeId = "";
         rootRecipe.outputItemId = idOf(rootKey.getItem());
         rootRecipe.outputItemIndex = rootItemIdx;
+        rootRecipe.producingItemIndex = rootItemIdx;
         rootRecipe.root = true;
         rootRecipe.output = rootKey.toStack((int) Math.max(1, primary.amount()));
         rootRecipe.grid = rootGrid(pattern);
@@ -178,7 +180,8 @@ public final class CraftingTreeInspector {
                 rb.recipeId = recipeId;
                 rb.outputItemId = work.itemId();
                 rb.outputItemIndex = work.itemIndex();
-                rb.banned = bans.isBanned(work.itemId(), recipeId);
+                rb.producingItemIndex = work.itemIndex();
+                rb.banned = bans.isBanned(work.itemId(), recipeId, work.itemIndex());
                 rb.bannedEverywhere = bans.isRecipeBannedEverywhere(recipeId);
                 if (!rb.banned && !activeChosen) {
                     rb.active = true;
@@ -372,12 +375,12 @@ public final class CraftingTreeInspector {
     private static CraftingTreeData toData(List<ItemBuilder> items, List<RecipeBuilder> recipes) {
         List<CraftingTreeData.ItemNode> itemNodes = new ArrayList<>(items.size());
         for (ItemBuilder ib : items) {
-            itemNodes.add(new CraftingTreeData.ItemNode(ib.icon, List.copyOf(ib.recipeIndices)));
+            itemNodes.add(new CraftingTreeData.ItemNode(ib.icon, List.copyOf(ib.recipeIndices), ib.depth));
         }
         List<CraftingTreeData.RecipeNode> recipeNodes = new ArrayList<>(recipes.size());
         for (RecipeBuilder rb : recipes) {
-            recipeNodes.add(new CraftingTreeData.RecipeNode(rb.recipeId, rb.outputItemId, List.copyOf(rb.grid),
-                    rb.output, rb.banned, rb.bannedEverywhere, rb.active, rb.root,
+            recipeNodes.add(new CraftingTreeData.RecipeNode(rb.recipeId, rb.outputItemId, rb.producingItemIndex,
+                    List.copyOf(rb.grid), rb.output, rb.banned, rb.bannedEverywhere, rb.active, rb.root,
                     List.copyOf(rb.ingredientItemIndices)));
         }
         return new CraftingTreeData(List.copyOf(itemNodes), List.copyOf(recipeNodes));
