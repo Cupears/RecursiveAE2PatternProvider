@@ -1,4 +1,4 @@
-# Otter’s AE2 Recursive Patterns
+# Otter's AE2 Recursive Patterns
 
 [![Minecraft 26.1.2](https://img.shields.io/badge/Minecraft-26.1.2-FF8A24?style=flat-square)](#requirements)
 [![NeoForge](https://img.shields.io/badge/Loader-NeoForge-D96B19?style=flat-square)](#requirements)
@@ -9,7 +9,7 @@
 
 I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://github.com/Lumengrid/RecursiveAE2PatternProvider). I brought my fixes together on `main`, so there is one complete version to download and build.
 
-[Download the JAR](https://github.com/Cupears/RecursiveAE2PatternProvider/releases/latest) · [Report an issue](https://github.com/Cupears/RecursiveAE2PatternProvider/issues) · [My upstream contributions](https://github.com/Lumengrid/RecursiveAE2PatternProvider/issues/16)
+[Download the JAR](https://github.com/Cupears/RecursiveAE2PatternProvider/releases/latest) | [Report an issue](https://github.com/Cupears/RecursiveAE2PatternProvider/issues) | [My upstream contributions](https://github.com/Lumengrid/RecursiveAE2PatternProvider/issues/16)
 
 ## Requirements
 
@@ -89,7 +89,7 @@ Use JDK 23 to run the included Gradle wrapper. The configured toolchain resolves
 
 On Windows, use `gradlew.bat build`. The installable JAR is written to `build/libs/`. GitHub Actions builds pushes to `main` and pull requests, and attaches the JAR to successful builds. Version tags matching `v<mod_version>-otter.*` also publish a release after the build passes. A manual run can build a branch or publish a matching version tag.
 
-[Read the changelog](CHANGELOG.md) � [View builds](https://github.com/Cupears/RecursiveAE2PatternProvider/actions)
+[Read the changelog](CHANGELOG.md) | [View builds](https://github.com/Cupears/RecursiveAE2PatternProvider/actions)
 
 ## Credits
 
