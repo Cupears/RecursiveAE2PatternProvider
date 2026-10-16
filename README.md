@@ -1,5 +1,10 @@
 # Otter’s AE2 Recursive Patterns
 
+[![Minecraft 26.1.2](https://img.shields.io/badge/Minecraft-26.1.2-FF8A24?style=flat-square)](#requirements)
+[![NeoForge](https://img.shields.io/badge/Loader-NeoForge-D96B19?style=flat-square)](#requirements)
+[![Java 25](https://img.shields.io/badge/Java-25-B45309?style=flat-square)](#requirements)
+[![Download JAR](https://img.shields.io/badge/Download-JAR-FF8A24?style=flat-square)](https://github.com/Cupears/RecursiveAE2PatternProvider/releases/latest)
+
 **Recursive AE2 crafting, with fewer patterns to manage.**
 
 I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://github.com/Lumengrid/RecursiveAE2PatternProvider). I brought my fixes together on `main`, so there is one complete version to download and build.
@@ -19,7 +24,10 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 3. Put the JAR in the client and server `mods` folders, or just the client folder for single-player.
 4. Remove the older Recursive AE2 Pattern Provider JAR from `mods`, then launch again.
 
-I retain the original mod ID, `recursiveae2patternprovider`, so this replaces the original mod. Install only one copy. Existing recursive flags and the config filename remain compatible.
+> [!WARNING]
+> Install only one copy. I retain the original mod ID, `recursiveae2patternprovider`, so this replaces Recursive AE2 Pattern Provider. Remove the older JAR from `mods` before launching.
+
+Existing recursive flags and the config filename remain compatible.
 
 ## Use it
 
@@ -33,7 +41,10 @@ To start new encoding sessions in recursive mode, add this to `config/recursivea
 defaultRecursiveMode = true
 ```
 
-In multiplayer, the server supplies the initial toggle state. You can still switch it off in the terminal. Existing stored patterns are not converted automatically.
+> [!TIP]
+> Recursive mode starts off by default. Set `defaultRecursiveMode = true` to start new encoding sessions with it enabled. In multiplayer, set this on the server; you can still switch it off in the terminal.
+
+Existing stored patterns are not converted automatically.
 
 ## What I changed
 
