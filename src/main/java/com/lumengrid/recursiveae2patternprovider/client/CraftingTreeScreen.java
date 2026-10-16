@@ -262,6 +262,7 @@ public class CraftingTreeScreen extends Screen {
 
         cardHits.clear();
         drawConnectors(g);
+        drawProducerLines(g);
 
         for (var entry : itemRects.entrySet()) {
             int item = entry.getKey();
@@ -391,6 +392,30 @@ public class CraftingTreeScreen extends Screen {
         g.fill(Math.min(x0, elbowX), y0, Math.max(x0, elbowX) + 1, y0 + 1, color);
         g.fill(elbowX, Math.min(y0, y1), elbowX + 1, Math.max(y0, y1) + 1, color);
         g.fill(Math.min(elbowX, x1), y1, Math.max(elbowX, x1) + 1, y1 + 1, color);
+    }
+
+    /** Draw a short line from each item node to its producing recipe card, so produced items
+     *  always have a visible connection even when nothing consumes them as an ingredient. */
+    private void drawProducerLines(GuiGraphicsExtractor g) {
+        for (int itemIdx = 0; itemIdx < tree.items().size(); itemIdx++) {
+            int[] r = itemRects.get(itemIdx);
+            if (r == null) {
+                continue;
+            }
+            var recipeIndices = tree.items().get(itemIdx).recipeIndices();
+            if (recipeIndices.isEmpty()) {
+                continue; // raw material with no crafting recipe
+            }
+            int recipeIdx = recipeIndices.get(0);
+            var recipe = tree.recipes().get(recipeIdx);
+            if (!recipe.active() && !recipe.banned() && !recipe.root()) {
+                continue;
+            }
+            int cy = r[1] + HEADER_H + NODE_PAD + CARD_H / 2;
+            int color = recipe.banned() ? COL_BANNED : (recipe.active() ? COL_ACTIVE : COL_ROOT);
+            // Short line from item's left edge into the node at the recipe's vertical center.
+            g.fill(r[0], cy - 1, r[0] + 22, cy + 1, color);
+        }
     }
 
     private boolean drawItemNode(GuiGraphicsExtractor g, int item, int x, int y, int w, int h,
