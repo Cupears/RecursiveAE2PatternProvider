@@ -1,4 +1,4 @@
-name: Build Otter Patterns
+name: Build AE2 Recursive Patterns
 
 on:
   push:
