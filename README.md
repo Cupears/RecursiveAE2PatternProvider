@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.1.3.jar` from Releases.
+1. Download `otter-patterns-1.2.0-beta.1.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
 4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.
@@ -49,6 +49,21 @@ To start with recursion off instead, set `defaultRecursiveMode = false`. Existin
 - Refresh stale ingredient keys before new plans when the crafting network is idle.
 - Add a server-synchronized default for recursive encoding, with an explicit off toggle that also works when re-encoding.
 - Load optional wireless-terminal integration only when its mod is installed.
+
+## Recipe-tree editor
+
+On this feature branch, I added an orange recipe-tree editor for recursive patterns.
+
+1. Take the recursive pattern out of its provider, hold it, and **right-click in air**.
+2. Click an ingredient card to expand its alternative crafting recipes. Double-click a recipe card, or click its `[+]`, to expand its ingredients.
+3. Select a recipe and choose **Disable route**, or right-click its card. The same control enables it again. Disabling a recipe excludes all of its generated ingredient variants for this pattern.
+4. Choose **Save**, reinsert the pattern in its provider, and request a fresh craft. **Cancel** or Escape discards unsaved edits.
+
+Drag the empty canvas to pan, scroll to move, and use `+` / `-` to zoom. **Reset rules** clears this pattern's exclusions; **Reset view** only changes the view.
+
+I save up to 128 exact recipe exclusions on the encoded pattern. They survive copying, saving, and re-encoding. This filters dependencies generated for that pattern; AE2's shared network can still use manually supplied patterns or routes offered by other recursive patterns/providers.
+
+The tree previews crafting alternatives, rather than the selected AE2 craft or ME inventory stock. Recipe grids show example ingredients; accepted wood and other variants may differ. A bounded preview shows up to 320 nodes, 32 recipes per item, and six dependency levels, with a notice when it is truncated. Existing exclusions outside the preview are preserved. If all shown routes are disabled, the item can still come from storage or a supplied pattern.
 
 ## Configuration
 

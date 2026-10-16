@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0-beta.1
+
+I added an orange recipe-tree editor opened by right-clicking a held recursive pattern in air. I can disable or re-enable exact generated recipe routes, save those exclusions on the pattern, and inspect nested example recipes. I added bounded server-authored previews, save/cancel, pan/zoom, reset controls, and checks that the held pattern has not changed before saving.
+
 ## 1.1.3
 
 I aligned the fork's metadata and documentation with the author's published CC BY 4.0 license. I included the full license, attribution, and unchanged NeoForge template notice in the JAR. Crafting behavior is unchanged from 1.1.2.

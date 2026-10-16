@@ -26,7 +26,7 @@ public class TooltipHandler {
             return;
         }
 
-        if (!stack.is(AEItems.CRAFTING_PATTERN.asItem()) || !PatternUtil.isRecursive(stack)) {
+        if (!PatternUtil.isRecursive(stack)) {
             return;
         }
 
@@ -54,6 +54,10 @@ public class TooltipHandler {
                 }
             }
             tooltip.add(insertIndex, recursiveComponent);
+            tooltip.add(insertIndex + 1, Component.translatable("gui.recursiveae2patternprovider.tree.tooltip").withColor(0xFF9A32));
+            int exclusions = com.lumengrid.recursiveae2patternprovider.PatternRecipeRules.read(stack).size();
+            if (exclusions > 0) tooltip.add(insertIndex + 2, Component.translatable(
+                    "gui.recursiveae2patternprovider.tree.tooltip_count", exclusions).withColor(0xFF9A32));
 
         } catch (Exception e) {
             RecursiveAE2PatternProvider.LOGGER.debug("Errore nell'aggiunta del tooltip al pattern: {}", e.getMessage());

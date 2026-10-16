@@ -15,6 +15,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = WirelessComprehensiveWorkTerminalMenu.class, remap = false)
 public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRecursivePatternMenu {
+    @org.spongepowered.asm.mixin.Shadow
+    private appeng.menu.slot.RestrictedInputSlot encodedPatternSlot;
+
 
     @Unique
     @GuiSync(30000)
@@ -38,6 +41,8 @@ public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRec
                 return;
             }
 
+            if (encodedPatternSlot != null) com.lumengrid.recursiveae2patternprovider.PatternRecipeRules.copy(
+                    encodedPatternSlot.getItem(), encodedPattern);
             PatternUtil.setRecursive(encodedPattern, Config.ENABLE.get() && this.recursiveModeActive);
 
         } catch (Exception e) {

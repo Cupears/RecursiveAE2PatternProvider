@@ -18,6 +18,9 @@ import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 @Mixin(value = PatternEncodingTermMenu.class, remap = false)
 public abstract class PatternEncodingTermMenuMixin implements IRecursivePatternMenu {
+    @org.spongepowered.asm.mixin.Shadow
+    private appeng.menu.slot.RestrictedInputSlot encodedPatternSlot;
+
 
     @Shadow
     public abstract EncodingMode getMode();
@@ -47,6 +50,8 @@ public abstract class PatternEncodingTermMenuMixin implements IRecursivePatternM
                 return;
             }
 
+            if (encodedPatternSlot != null) com.lumengrid.recursiveae2patternprovider.PatternRecipeRules.copy(
+                    encodedPatternSlot.getItem(), encodedPattern);
             PatternUtil.setRecursive(encodedPattern, Config.ENABLE.get() && this.recursiveModeActive);
 
         } catch (Exception e) {

@@ -64,6 +64,12 @@ public final class RecursivePatternGenerator {
             return new Settings(maxAlternatives, retainAlternatives, skipSelf, exact, prefixes);
         }
 
+        Settings withExclusions(Set<String> exclusions) {
+            Set<String> exact = new HashSet<>(blacklistExact);
+            exact.addAll(exclusions);
+            return new Settings(maxAlternativesPerItem, retainAlternatives, skipSelfReferential, exact, blacklistPrefixes);
+        }
+
         boolean isBlacklisted(Identifier recipeId) {
             String id = recipeId.toString();
             if (blacklistExact.contains(id)) return true;
@@ -100,7 +106,7 @@ public final class RecursivePatternGenerator {
 
     private static volatile CachedIndex cached;
 
-    private static Map<Item, List<RecipeHolder<CraftingRecipe>>> getRecipeIndex(Level level) {
+    static Map<Item, List<RecipeHolder<CraftingRecipe>>> getRecipeIndex(Level level) {
         if (level.getServer() == null) {
             return new HashMap<>();
         }
@@ -160,6 +166,14 @@ public final class RecursivePatternGenerator {
         return cached == null ? Set.of() : cached.furnaceOutputs();
     }
 
+    static RecipeSelection editorSelection(Level level) {
+        var settings = Settings.fromConfig();
+        return new RecipeSelection(getRecipeIndex(level), getFurnaceOutputs(level.getServer().getRecipeManager()),
+                r -> !settings.isBlacklisted(r.id().identifier()) && (!settings.skipSelfReferential()
+                        || !usesItem(r.value(), r.value().assemble(CraftingInput.EMPTY).getItem())),
+                RecursivePatternGenerator::getRecipeInputsAs3x3Grid);
+    }
+
     public static List<IPatternDetails> collectRecursivePatterns(Iterable<ItemStack> patternInventory, Level level) {
         List<IPatternDetails> recursivePatterns = new ArrayList<>();
         if (patternInventory == null || level == null) {
@@ -189,31 +203,30 @@ public final class RecursivePatternGenerator {
             return new ArrayList<>();
         }
 
-        Context ctx = new Context(level, maxDepth, getRecipeIndex(level), Settings.fromConfig());
-
-        if (existingPatterns != null) {
-            for (IPatternDetails existing : existingPatterns) {
-                markOutputsProcessed(existing, ctx);
-            }
+        Map<Set<String>, List<IPatternDetails>> groups = new java.util.LinkedHashMap<>();
+        for (var root : recursivePatterns) {
+            var rules = PatternRecipeRules.read(root.getDefinition().toStack());
+            groups.computeIfAbsent(rules, ignored -> new ArrayList<>()).add(root);
         }
-        for (IPatternDetails recursivePattern : recursivePatterns) {
-            markOutputsProcessed(recursivePattern, ctx);
-        }
-
-        for (IPatternDetails recursivePattern : recursivePatterns) {
-            List<Item> rootOutputs = new ArrayList<>();
-            for (var output : recursivePattern.getOutputs()) {
-                if (output.what() instanceof AEItemKey itemKey && ctx.ancestors.add(itemKey.getItem())) {
-                    rootOutputs.add(itemKey.getItem());
+        Set<IPatternDetails> allGenerated = new java.util.LinkedHashSet<>();
+        var settings = Settings.fromConfig();
+        var index = getRecipeIndex(level);
+        for (var group : groups.entrySet()) {
+            Context ctx = new Context(level, maxDepth, index, settings.withExclusions(group.getKey()));
+            if (existingPatterns != null) for (var existing : existingPatterns) markOutputsProcessed(existing, ctx);
+            for (var root : recursivePatterns) markOutputsProcessed(root, ctx);
+            for (var root : group.getValue()) {
+                List<Item> rootOutputs = new ArrayList<>();
+                for (var output : root.getOutputs()) {
+                    if (output.what() instanceof AEItemKey key && ctx.ancestors.add(key.getItem())) rootOutputs.add(key.getItem());
                 }
+                try { generateDependencyPatterns(root, 0, ctx); }
+                finally { rootOutputs.forEach(ctx.ancestors::remove); }
             }
-            try {
-                generateDependencyPatterns(recursivePattern, 0, ctx);
-            } finally {
-                rootOutputs.forEach(ctx.ancestors::remove);
-            }
+            allGenerated.addAll(ctx.generated);
         }
-        return ctx.generated;
+        // Reuse a context for equal rule sets, while keeping different roots' exclusions independent.
+        return new ArrayList<>(allGenerated);
     }
 
     private static void markOutputsProcessed(IPatternDetails pattern, Context ctx) {
@@ -398,7 +411,7 @@ public final class RecursivePatternGenerator {
         return false;
     }
 
-    private static ItemStack[] getRecipeInputsAs3x3Grid(CraftingRecipe recipe) {
+    static ItemStack[] getRecipeInputsAs3x3Grid(CraftingRecipe recipe) {
         ItemStack[] inputs = new ItemStack[9];
         Arrays.fill(inputs, ItemStack.EMPTY);
 
