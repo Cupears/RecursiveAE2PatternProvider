@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0-beta.6
+
+- Restored the left-to-right recipe-tree layout and horizontal connectors.
+- Reset view returns to the main item at the upper left.
+
 ## 1.2.0-beta.5
 
 - Moved the editor to a Configure recipe tree button in pattern terminals.

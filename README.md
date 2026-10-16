@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.2.0-beta.5.jar` from Releases.
+1. Download `otter-patterns-1.2.0-beta.6.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
 4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.
@@ -55,7 +55,7 @@ To start with recursion off instead, set `defaultRecursiveMode = false`. Existin
 On this feature branch, I added a light-orange recipe-tree editor with AE2-style panels.
 
 1. Put a recursive pattern in the Pattern Encoding Terminal's encoded-pattern slot.
-2. Click **Configure recipe tree** beside the encoding options. The tree opens expanded, with the requested item at the top and its dependencies below.
+2. Click **Configure recipe tree** beside the encoding options. The tree opens expanded, with the requested item on the left and its dependencies extending to the right.
 3. **Shift-click a recipe** to disable or re-enable that exact recipe everywhere within this pattern. Other recipes making the same item stay available. **Disable route** and right-click provide the same recipe-wide toggle.
 4. **Save** updates the pattern in the terminal and returns to it. **Cancel** or Escape discards unsaved edits.
 

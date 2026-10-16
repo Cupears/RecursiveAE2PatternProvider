@@ -1,1 +1,1 @@
-Moved the recipe editor into pattern terminals. Trees open expanded, with the main item above its dependencies, light-orange AE2-style panels and links for shared ingredients. Shift-click toggles a recipe throughout the edited pattern. Save updates the terminal pattern and returns to the terminal.
+Restored the left-to-right recipe-tree layout, with the main item at the upper left and dependencies extending to the right.

@@ -170,37 +170,23 @@ public final class RecipeTreeScreen extends Screen {
         }
     }
 
-    // Root above its dependencies. Iterative traversal also handles very deep trees.
+    // Dependencies run left to right, with each first child on its parent's row.
     private void layout() {
         record Pending(int id, int depth) {}
         var stack = new ArrayDeque<Pending>();
-        var order = new ArrayList<Pending>();
         stack.push(new Pending(0, 0));
-        while (!stack.isEmpty()) {
-            var next = stack.pop(); order.add(next);
-            var nested = expanded.contains(next.id()) ? children.getOrDefault(next.id(), List.of()) : List.<Integer>of();
-            for (int i = nested.size() - 1; i >= 0; i--) stack.push(new Pending(nested.get(i), next.depth() + 1));
-        }
-        var positions = new HashMap<Integer, Integer>();
-        int column = 0;
-        for (var next : order) {
-            if (!expanded.contains(next.id()) || !children.containsKey(next.id()))
-                positions.put(next.id(), column++ * (CARD_WIDTH + 12));
-        }
-        for (int i = order.size() - 1; i >= 0; i--) {
-            var next = order.get(i);
-            if (!positions.containsKey(next.id())) {
-                var nested = children.get(next.id());
-                positions.put(next.id(), positions.get(nested.getFirst()) / 2 + positions.get(nested.getLast()) / 2);
-            }
-        }
-        // Keep the root at x=0 so new branches do not push it out of view while loading.
-        int rootX = positions.getOrDefault(0, 0);
+        int row = 0;
         boxes.clear();
-        for (var next : order) boxes.add(new Box(next.id(), positions.get(next.id()) - rootX,
-                next.depth() * (CARD_HEIGHT + 12)));
+        while (!stack.isEmpty()) {
+            var next = stack.pop();
+            boxes.add(new Box(next.id(), next.depth() * (CARD_WIDTH + 16), row * (CARD_HEIGHT + 8)));
+            var nested = expanded.contains(next.id()) ? children.getOrDefault(next.id(), List.of()) : List.<Integer>of();
+            if (!nested.isEmpty()) {
+                for (int i = nested.size() - 1; i >= 0; i--) stack.push(new Pending(nested.get(i), next.depth() + 1));
+            } else row++;
+        }
         layoutDirty = false;
-        if (centerOnRoot) { panX = width / 2.0 - CARD_WIDTH * zoom / 2; centerOnRoot = false; }
+        if (centerOnRoot) { panX = 16; panY = 12; centerOnRoot = false; }
     }
     private static void panel(GuiGraphicsExtractor g, int x, int y, int w, int h, int fill) {
         g.fill(x, y, x + w, y + h, fill);
@@ -239,11 +225,11 @@ public final class RecipeTreeScreen extends Screen {
             int parent = nodes.get(box.id()).parent();
             var p = byId.get(parent);
             if (p == null) continue;
-            int x1 = p.x() + CARD_WIDTH / 2, y1 = p.y() + CARD_HEIGHT;
-            int x2 = box.x() + CARD_WIDTH / 2, y2 = box.y(), bend = y1 + 6;
-            g.verticalLine(x1, y1, bend, ORANGE);
-            g.horizontalLine(Math.min(x1, x2), Math.max(x1, x2), bend, ORANGE);
-            g.verticalLine(x2, bend, y2, ORANGE);
+            int x1 = p.x() + CARD_WIDTH, y1 = p.y() + CARD_HEIGHT / 2;
+            int x2 = box.x(), y2 = box.y() + CARD_HEIGHT / 2, bend = x1 + 8;
+            g.horizontalLine(x1, bend, y1, ORANGE);
+            g.verticalLine(bend, Math.min(y1, y2), Math.max(y1, y2), ORANGE);
+            g.horizontalLine(bend, x2, y2, ORANGE);
         }
         double x = (mx - panX) / zoom, y = (my - 57 - panY) / zoom;
         for (var box : boxes) {
