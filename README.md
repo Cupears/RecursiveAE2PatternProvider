@@ -93,4 +93,10 @@ On Windows, use `gradlew.bat build`. The installable JAR is written to `build/li
 
 ## Credits
 
-Original mod by **Lumengrid**. Fork maintenance and the changes above by **Cupears**. I keep the upstream licensing and attribution intact. My individual contributions remain available as separate upstream pull requests.
+Original mod by **Lumengrid (Lumengrid89)**. I maintain this independent fork as **Cupears**; my changes are described above and in [CHANGELOG.md](CHANGELOG.md). This fork is not an official upstream release. My individual contributions remain available as separate upstream pull requests.
+
+## Licensing status
+
+I found inconsistent upstream license declarations: the author's [CurseForge license page](https://www.curseforge.com/minecraft/mc-mods/recursive-ae2-pattern-provider/license) publishes **CC BY 4.0**, and [Modrinth's project metadata](https://api.modrinth.com/v2/project/recursiveae2patternprovider) agrees, while the [26.1 source metadata](https://github.com/Lumengrid/RecursiveAE2PatternProvider/blob/26.1/gradle.properties) says **All Rights Reserved**. I have preserved that source declaration and have not replaced it with a different license. The license applicable to the 26.1 source and modified builds needs clarification from Lumengrid.
+
+[TEMPLATE_LICENSE.txt](TEMPLATE_LICENSE.txt) contains the **NeoForged project's MIT license for MDK template files only**. It does not license the whole mod. I retain that notice unchanged. See [NOTICE.md](NOTICE.md) for attribution and the license references.
