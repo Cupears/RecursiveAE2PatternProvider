@@ -3,6 +3,7 @@ name: Build AE2 Recursive Patterns
 on:
   push:
     branches: [main]
+    tags: ['v*-otter.*']
   pull_request:
   workflow_dispatch:
 
@@ -28,6 +29,13 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Check release tag version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          version=$(sed -n 's/^mod_version=//p' gradle.properties | tr -d '\r')
+          [[ "$GITHUB_REF_NAME" == "v${version}-otter."* ]] || { echo "Tag does not match mod_version"; exit 1; }
+
       - name: Build with Gradle
         run: bash ./gradlew build --console=plain
 
@@ -37,3 +45,30 @@ jobs:
           name: otter-patterns
           path: build/libs/otter-patterns-*.jar
           if-no-files-found: error
+
+  release:
+    if: github.repository == 'Cupears/RecursiveAE2PatternProvider' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: otter-patterns
+          path: release
+      - name: Publish versioned JAR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          cd release
+          sha256sum otter-patterns-*.jar > SHA256SUMS.txt
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; leaving published assets unchanged."
+          else
+            gh release create "$GITHUB_REF_NAME" otter-patterns-*.jar SHA256SUMS.txt \
+              --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Otter's AE2 Recursive Patterns ${GITHUB_REF_NAME}" --notes-file ../RELEASE_NOTES.md
+          fi

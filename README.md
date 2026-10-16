@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.1.1.jar` from Releases.
+1. Download `otter-patterns-1.1.2.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
 4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.
@@ -45,9 +45,10 @@ To start with recursion off instead, set `defaultRecursiveMode = false`. Existin
 - Preserve empty slots in shaped recipes, including clocks.
 - Offer recipe alternatives so AE2 can use available materials without expanding compression loops.
 - Generate valid ingredient variants and keep the selected materials fixed during execution.
-- Add short orange tooltips explaining what a missing source would produce.
+- Add short orange tooltips explaining what ingredients make in successful and partial plans.
 - Refresh stale ingredient keys before new plans when the crafting network is idle.
-- Add a server-synchronized default for recursive encoding.
+- Add a server-synchronized default for recursive encoding, with an explicit off toggle that also works when re-encoding.
+- Load optional wireless-terminal integration only when its mod is installed.
 
 ## Configuration
 
@@ -65,6 +66,19 @@ The common config lives at `config/recursiveae2patternprovider-common.toml`.
 
 I generate crafting dependencies; machine operations such as smelting still need existing processing patterns or supplied materials. Species-specific recipes still require their specific wood. Recipe choices are bounded and do not guarantee the cheapest possible route. The stale-key refresh covers ordinary AE2 and AdvancedAE providers and waits while a crafting CPU is busy.
 
+## Troubleshooting
+
+| What I see | What to check |
+| --- | --- |
+| An unexpected wood in the plan | Hover it to see the orange **Used to make** line. Generic chests can use another wood; a cherry drawer still requires cherry materials. |
+| Missing essence, hats, or another unusual source | The tooltip describes the selected recipe path. Supplying its product directly can avoid that path; recalculate the plan afterwards. |
+| A missing material normally made in a machine | Add its processing pattern or supply it directly. Recursive generation covers crafting recipes. |
+| A job stays scheduled | Check provider/assembler connections, power, and the waiting ingredients. Cancel and request a fresh plan after changing patterns. If it still stalls, include the status screen in an issue. |
+| Recursion starts off | Check the server's existing `defaultRecursiveMode` value. A saved `false` overrides the new-install default. |
+| A duplicate-mod error at launch | Keep one Otter JAR and remove the original Recursive AE2 Pattern Provider JAR. |
+
+[Report a crafting problem](https://github.com/Cupears/RecursiveAE2PatternProvider/issues/new?template=bug_report.yml) with the requested item and quantity, mod versions, and screenshots of the plan and stalled status where applicable.
+
 ## Build from source
 
 Use JDK 23 to run the included Gradle wrapper. The configured toolchain resolves Java 25 for compilation.
@@ -73,7 +87,9 @@ Use JDK 23 to run the included Gradle wrapper. The configured toolchain resolves
 ./gradlew build
 ```
 
-On Windows, use `gradlew.bat build`. The installable JAR is written to `build/libs/`. GitHub Actions also attaches the JAR to successful builds.
+On Windows, use `gradlew.bat build`. The installable JAR is written to `build/libs/`. GitHub Actions builds pushes to `main` and pull requests, and attaches the JAR to successful builds. Version tags matching `v<mod_version>-otter.*` also publish a release after the build passes. A manual run can build a branch or publish a matching version tag.
+
+[Read the changelog](CHANGELOG.md) · [View builds](https://github.com/Cupears/RecursiveAE2PatternProvider/actions)
 
 ## Credits
 

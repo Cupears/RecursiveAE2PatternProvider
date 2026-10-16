@@ -1,0 +1,39 @@
+name: Crafting problem
+description: Report a recipe choice, missing material, or stalled craft.
+title: "[Crafting] "
+body:
+  - type: input
+    id: craft
+    attributes:
+      label: What I was crafting
+      description: Item name or ID and requested quantity.
+      placeholder: "100 cherry drawers (functionalstorage:cherry_1)"
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: My versions
+      description: Otter Patterns, Minecraft, NeoForge, AE2, modpack, and any AE2 addons involved.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened and what I expected
+      description: Include reproduction steps, relevant stored materials, and whether the job stalls or only looks wrong in the plan.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: My screenshots or logs
+      description: Drag in the crafting plan and status screenshots, or attach relevant log excerpts.
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where it happens
+      options:
+        - Single-player
+        - Multiplayer server
+        - Both
