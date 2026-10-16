@@ -35,6 +35,9 @@ public abstract class WirelessComprehensiveWorkTerminalScreenMixin extends Scree
     @Unique
     private ToggleButton recursiveBtn;
 
+    @Unique
+    private com.lumengrid.recursiveae2patternprovider.client.RecipeTreeButton treeButton;
+
     @Inject(method = "init", at = @At("TAIL"))
     private void addRecursiveButtonWCWT(CallbackInfo ci) {
         this.recursiveBtn = new ToggleButton(
@@ -62,10 +65,19 @@ public abstract class WirelessComprehensiveWorkTerminalScreenMixin extends Scree
         ));
 
         this.addRenderableWidget(this.recursiveBtn);
+        treeButton = addRenderableWidget(new com.lumengrid.recursiveae2patternprovider.client.RecipeTreeButton());
     }
 
     @Inject(method = "updatePatternEncodingOptionButtons", at = @At("TAIL"))
     private void onUpdatePatternEncodingOptionButtonsWCWT(CallbackInfo ci) {
+        if (treeButton != null && patternFluidSubstitutionButton != null) {
+            var player = Minecraft.getInstance().player;
+            treeButton.setX(patternFluidSubstitutionButton.getX() + 20);
+            treeButton.setY(patternFluidSubstitutionButton.getY());
+            treeButton.setVisibility(Config.ENABLE.get() && patternEncodingMode == EncodingMode.CRAFTING
+                    && patternFluidSubstitutionButton.visible && player != null
+                    && com.lumengrid.recursiveae2patternprovider.client.RecipeTreeButton.canEdit(player.containerMenu));
+        }
         if (!Config.ENABLE.get() || !Config.ENABLE_ENCODING_GUI_TOGGLE.get()) {
             if (this.recursiveBtn != null) {
                 this.recursiveBtn.setVisibility(false);

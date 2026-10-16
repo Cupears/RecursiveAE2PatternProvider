@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.2.0-beta.2.jar` from Releases.
+1. Download `otter-patterns-1.2.0-beta.5.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
 4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.
@@ -52,18 +52,18 @@ To start with recursion off instead, set `defaultRecursiveMode = false`. Existin
 
 ## Recipe-tree editor
 
-On this feature branch, I added an orange recipe-tree editor for recursive patterns.
+On this feature branch, I added a light-orange recipe-tree editor with AE2-style panels.
 
-1. Take the recursive pattern out of its provider, hold it, and **right-click in air**.
-2. Click an ingredient card to expand its alternative crafting recipes. Double-click a recipe card, or click its `[+]`, to expand its ingredients.
-3. Select a recipe and choose **Disable route**, or right-click its card. The same control enables it again. Disabling a recipe excludes all of its generated ingredient variants for this pattern.
-4. Choose **Save**, reinsert the pattern in its provider, and request a fresh craft. **Cancel** or Escape discards unsaved edits.
+1. Put a recursive pattern in the Pattern Encoding Terminal's encoded-pattern slot.
+2. Click **Configure recipe tree** beside the encoding options. The tree opens expanded, with the requested item at the top and its dependencies below.
+3. **Shift-click a recipe** to disable or re-enable that exact recipe everywhere within this pattern. Other recipes making the same item stay available. **Disable route** and right-click provide the same recipe-wide toggle.
+4. **Save** updates the pattern in the terminal and returns to it. **Cancel** or Escape discards unsaved edits.
 
-Drag the empty canvas to pan, scroll to move, and use `+` / `-` to zoom. **Reset rules** clears this pattern's exclusions; **Reset view** only changes the view.
+Drag the empty canvas to pan, scroll to move, and use `+` / `-` to zoom. **Reset rules** clears this pattern's exclusions; **Reset view** recenters the tree. The button also supports the Wireless Comprehensive Work Terminal's crafting panel.
 
 I save up to 128 exact recipe exclusions on the encoded pattern. They survive copying, saving, and re-encoding. This filters dependencies generated for that pattern; AE2's shared network can still use manually supplied patterns or routes offered by other recursive patterns/providers.
 
-The compact tree has a transparent background and loads recipe alternatives as I expand branches. There is no total node, recipe-count or depth cutoff; circular paths stop at the repeated item. Recipe grids show example ingredients rather than the selected AE2 craft or ME inventory stock, so accepted wood and other variants may differ. Existing exclusions on unopened branches are preserved. If all routes are disabled, the item can still come from storage or a supplied pattern.
+Branches load automatically in small batches without a total node, recipe-count or depth cutoff. Repeated ingredients link to their already-expanded recipes, and circular paths stop at the repeated item. Recipe grids show example ingredients rather than a selected AE2 craft or ME inventory stock, so accepted wood and other variants may differ. Saved exclusions remain intact while the tree loads. If all routes are disabled, the item can still come from storage or a supplied pattern.
 
 ## Configuration
 

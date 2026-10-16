@@ -17,13 +17,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 @Mixin(value = PatternEncodingTermMenu.class, remap = false)
-public abstract class PatternEncodingTermMenuMixin implements IRecursivePatternMenu {
+public abstract class PatternEncodingTermMenuMixin implements IRecursivePatternMenu, com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu {
     @org.spongepowered.asm.mixin.Shadow
     private appeng.menu.slot.RestrictedInputSlot encodedPatternSlot;
 
 
     @Shadow
     public abstract EncodingMode getMode();
+
+    @Override
+    public net.minecraft.world.inventory.Slot recursiveAE2$treeSlot() { return encodedPatternSlot; }
 
     @Unique
     @GuiSync(com.lumengrid.recursiveae2patternprovider.menu.RecursiveMenuSync.RECURSIVE_MODE)

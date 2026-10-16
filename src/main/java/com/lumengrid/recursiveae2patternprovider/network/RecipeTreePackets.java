@@ -35,6 +35,17 @@ public final class RecipeTreePackets {
             buf.writeUtf(id, PatternRecipeRules.MAX_ID_LENGTH);
         }
     }
+    public record RequestOpen(int containerId) implements CustomPacketPayload {
+        public static final Type<RequestOpen> TYPE = RecipeTreePackets.type("recipe_tree_request");
+        public static final StreamCodec<RegistryFriendlyByteBuf, RequestOpen> CODEC = new StreamCodec<>() {
+            public RequestOpen decode(RegistryFriendlyByteBuf buf) { return new RequestOpen(buf.readVarInt()); }
+            public void encode(RegistryFriendlyByteBuf buf, RequestOpen packet) { buf.writeVarInt(packet.containerId()); }
+        };
+        public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        public static void handle(RequestOpen packet, IPayloadContext ctx) {
+            ctx.enqueueWork(() -> { if (ctx.player() instanceof ServerPlayer player) RecipeTreeSessions.open(player, packet.containerId()); });
+        }
+    }
     public record Open(UUID session, RecipeTree tree, Set<String> excluded) implements CustomPacketPayload {
         public static final Type<Open> TYPE = RecipeTreePackets.type("recipe_tree_open");
         public static final StreamCodec<RegistryFriendlyByteBuf, Open> CODEC = new StreamCodec<>() {

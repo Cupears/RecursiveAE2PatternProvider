@@ -14,13 +14,13 @@ To include TransparentAE2, add `'-PsmokeCompatJar=C:\path\to\transparentae2.jar'
 The run exercises:
 
 - Pattern Encoding, Crafting, Pattern Access and ME terminals, including recursive-mode synchronization.
-- Opening a held recursive pattern through its actual right-click packet.
-- Loading 200 additional recipe alternatives across multiple server responses, exceeding 320 total nodes.
-- Expanding branches, panning, zooming, resetting the view and toggling recipe routes.
-- Saving rules to the held pattern, reopening, cancelling changes and resetting saved rules.
-- Checking the short save confirmation.
-- Blocking Cancel during a pending save, rejecting a missing session and rejecting a changed held item.
-- The missing-confirmation timeout boundary (advanced directly rather than waiting 30 seconds).
+- Opening the editor through the terminal button with a real encoded crafting pattern.
+- Automatically loading 200 additional recipe alternatives across multiple server responses, exceeding 320 total nodes.
+- Expanded defaults, shared-ingredient links, zoom and reset view.
+- Shift-click excluding only the selected recipe, leaving alternative recipes available.
+- Saving to the encoded slot and returning to the terminal, cancelling edits and resetting rules.
+- Blocking Cancel during a pending save and rejecting a changed encoded pattern without overwriting its replacement.
+- Checking that right-clicking a held pattern and requests for an invalid menu cannot open the editor.
 
 Results are written to `../recipe-tree-smoke/` beside the checkout. The report must end in `PASS`; a successful Gradle exit alone does not establish that the checks passed. The smoke harness is excluded from all JAR archives. Normal builds do not compile it.
 

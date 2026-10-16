@@ -14,8 +14,14 @@ import java.util.*;
 
 /** Server-authored recipe alternatives with explicit per-item save/cancel. */
 public final class RecipeTreeScreen extends Screen {
-    private static final int ORANGE = 0xFFFF9A32, CARD_WIDTH = 132, CARD_HEIGHT = 76;
+    private static final int ORANGE = 0xFFFFC98A, CARD_WIDTH = 132, CARD_HEIGHT = 82;
     private final RecipeTreePackets.Open snapshot;
+    private final Screen terminalScreen;
+    private final net.minecraft.world.inventory.AbstractContainerMenu terminalMenu;
+    private final Map<appeng.api.stacks.AEItemKey, Integer> firstBranch = new HashMap<>();
+    private final Map<Integer, Integer> sharedBranches = new HashMap<>();
+    private final ArrayDeque<Integer> loadQueue = new ArrayDeque<>();
+    private boolean layoutDirty = true, centerOnRoot = true;
     private final Set<String> excluded;
     private final List<RecipeTree.Node> nodes;
     private final Set<Integer> complete = new HashSet<>();
@@ -36,11 +42,27 @@ public final class RecipeTreeScreen extends Screen {
     private RecipeTreeScreen(RecipeTreePackets.Open snapshot) {
         super(tr("title"));
         this.snapshot = snapshot;
+        this.terminalScreen = Minecraft.getInstance().screen;
+        this.terminalMenu = Minecraft.getInstance().player.containerMenu;
         this.nodes = new ArrayList<>(snapshot.tree().nodes());
         this.excluded = new HashSet<>(snapshot.excluded());
         expanded.add(0);
-        for (int i = 1; i < nodes.size(); i++)
-            children.computeIfAbsent(nodes.get(i).parent(), k -> new ArrayList<>()).add(i);
+        for (int i = 0; i < nodes.size(); i++) {
+            if (i > 0) children.computeIfAbsent(nodes.get(i).parent(), k -> new ArrayList<>()).add(i);
+            registerNode(i);
+        }
+    }
+    private void registerNode(int id) {
+        expanded.add(id);
+        var node = nodes.get(id);
+        if (id == 0 || node.recipe() || node.note() == 2 || node.item().isEmpty()) return;
+        var previous = firstBranch.putIfAbsent(appeng.api.stacks.AEItemKey.of(node.item()), id);
+        if (previous == null) loadQueue.add(id);
+        else sharedBranches.put(id, previous);
+    }
+    private void returnToTerminal() {
+        var mc = Minecraft.getInstance();
+        mc.setScreen(mc.player != null && mc.player.containerMenu == terminalMenu ? terminalScreen : null);
     }
     private void requestBranch(int id) {
         if (id == 0 || nodes.get(id).recipe() || nodes.get(id).note() == 2 || complete.contains(id)
@@ -56,15 +78,17 @@ public final class RecipeTreeScreen extends Screen {
             screen.invalidSession = true; screen.status = tr("error"); screen.saveButton.active = false; screen.updateButtons(); return;
         }
         screen.pending.remove(packet.parent());
+        screen.layoutDirty = true;
         for (var node : packet.page().nodes()) {
             int id = screen.nodes.size(); screen.nodes.add(node);
             screen.children.computeIfAbsent(node.parent(), k -> new ArrayList<>()).add(id);
+            screen.registerNode(id);
         }
         var old = screen.nodes.get(packet.parent());
         screen.nodes.set(packet.parent(), new RecipeTree.Node(old.parent(), false, old.item(), "", List.of(), packet.page().note()));
         screen.offsets.put(packet.parent(), packet.page().nextOffset());
         if (packet.page().done()) screen.complete.add(packet.parent());
-        else if (screen.expanded.contains(packet.parent())) screen.requestBranch(packet.parent());
+        else screen.loadQueue.addFirst(packet.parent());
     }
     private static Component tr(String key, Object... args) {
         return Component.translatable("gui.recursiveae2patternprovider.tree." + key, args);
@@ -78,7 +102,7 @@ public final class RecipeTreeScreen extends Screen {
         screen.waiting = false;
         if (result.saved()) {
             screen.closed = true;
-            mc.setScreen(null);
+            screen.returnToTerminal();
             if (mc.player != null) mc.gui.setOverlayMessage(tr("saved"), false);
         } else {
             screen.status = tr(Set.of("stale", "invalid").contains(result.message()) ? result.message() : "error");
@@ -88,17 +112,18 @@ public final class RecipeTreeScreen extends Screen {
         }
     }
     @Override protected void init() {
+        layoutDirty = true; centerOnRoot = true;
         int w = Math.max(32, (width - 32) / 5);
         routeButton = addRenderableWidget(Button.builder(tr("disable"), b -> toggleSelected())
-                .bounds(8, height - 27, w, 20).build());
+                .bounds(8, height - 27, w, 20).build(MenuButton::new));
         addRenderableWidget(Button.builder(tr("reset_rules"), b -> { if (!waiting) { excluded.clear(); updateButtons(); } })
-                .bounds(12 + w, height - 27, w, 20).build());
-        addRenderableWidget(Button.builder(tr("reset_view"), b -> { panX = 16; panY = 12; zoom = 1; expanded.clear(); expanded.add(0); })
-                .bounds(16 + w * 2, height - 27, w, 20).build());
+                .bounds(12 + w, height - 27, w, 20).build(MenuButton::new));
+        addRenderableWidget(Button.builder(tr("reset_view"), b -> { panY = 12; zoom = 1; centerOnRoot = true; layoutDirty = true; })
+                .bounds(16 + w * 2, height - 27, w, 20).build(MenuButton::new));
         saveButton = addRenderableWidget(Button.builder(tr("save"), b -> save())
-                .bounds(20 + w * 3, height - 27, w, 20).build());
+                .bounds(20 + w * 3, height - 27, w, 20).build(MenuButton::new));
         cancelButton = addRenderableWidget(Button.builder(tr("cancel"), b -> onClose())
-                .bounds(24 + w * 4, height - 27, w, 20).build());
+                .bounds(24 + w * 4, height - 27, w, 20).build(MenuButton::new));
         saveButton.active = !waiting && !invalidSession;
         updateButtons();
     }
@@ -126,11 +151,14 @@ public final class RecipeTreeScreen extends Screen {
     @Override public void onClose() {
         if (waiting) return;
         if (!closed) ClientPacketDistributor.sendToServer(new RecipeTreePackets.Save(snapshot.session(), false, Set.of()));
-        closed = true; super.onClose();
+        closed = true; returnToTerminal();
     }
     @Override public boolean isPauseScreen() { return false; }
     @Override public void tick() {
         super.tick(); ticks++;
+        var mc = Minecraft.getInstance();
+        if (mc.player == null || mc.player.containerMenu != terminalMenu) { closed = true; mc.setScreen(null); return; }
+        if (!waiting && !invalidSession && pending.isEmpty() && !loadQueue.isEmpty()) requestBranch(loadQueue.removeFirst());
         if (pending.values().stream().anyMatch(start -> ticks - start >= 20 * 30)) {
             pending.clear(); invalidSession = true; saveButton.active = false; status = tr("branch_timeout"); updateButtons();
         }
@@ -142,29 +170,66 @@ public final class RecipeTreeScreen extends Screen {
         }
     }
 
-    // Iterative layout supports arbitrarily deep expanded branches without recursion.
+    // Root above its dependencies. Iterative traversal also handles very deep trees.
     private void layout() {
         record Pending(int id, int depth) {}
-        var stack = new ArrayDeque<Pending>(); stack.push(new Pending(0, 0)); int row = 0;
+        var stack = new ArrayDeque<Pending>();
+        var order = new ArrayList<Pending>();
+        stack.push(new Pending(0, 0));
         while (!stack.isEmpty()) {
-            var next = stack.pop();
-            boxes.add(new Box(next.id(), next.depth() * (CARD_WIDTH + 16), row * (CARD_HEIGHT + 8)));
+            var next = stack.pop(); order.add(next);
             var nested = expanded.contains(next.id()) ? children.getOrDefault(next.id(), List.of()) : List.<Integer>of();
-            if (!nested.isEmpty()) {
-                for (int i = nested.size() - 1; i >= 0; i--) stack.push(new Pending(nested.get(i), next.depth() + 1));
-            } else row++;
+            for (int i = nested.size() - 1; i >= 0; i--) stack.push(new Pending(nested.get(i), next.depth() + 1));
+        }
+        var positions = new HashMap<Integer, Integer>();
+        int column = 0;
+        for (var next : order) {
+            if (!expanded.contains(next.id()) || !children.containsKey(next.id()))
+                positions.put(next.id(), column++ * (CARD_WIDTH + 12));
+        }
+        for (int i = order.size() - 1; i >= 0; i--) {
+            var next = order.get(i);
+            if (!positions.containsKey(next.id())) {
+                var nested = children.get(next.id());
+                positions.put(next.id(), positions.get(nested.getFirst()) / 2 + positions.get(nested.getLast()) / 2);
+            }
+        }
+        // Keep the root at x=0 so new branches do not push it out of view while loading.
+        int rootX = positions.getOrDefault(0, 0);
+        boxes.clear();
+        for (var next : order) boxes.add(new Box(next.id(), positions.get(next.id()) - rootX,
+                next.depth() * (CARD_HEIGHT + 12)));
+        layoutDirty = false;
+        if (centerOnRoot) { panX = width / 2.0 - CARD_WIDTH * zoom / 2; centerOnRoot = false; }
+    }
+    private static void panel(GuiGraphicsExtractor g, int x, int y, int w, int h, int fill) {
+        g.fill(x, y, x + w, y + h, fill);
+        g.horizontalLine(x, x + w - 1, y, 0xFFFFE4C4);
+        g.verticalLine(x, y, y + h - 1, 0xFFFFE4C4);
+        g.horizontalLine(x, x + w - 1, y + h - 1, 0xFF705C48);
+        g.verticalLine(x + w - 1, y, y + h - 1, 0xFF705C48);
+    }
+    private static final class MenuButton extends Button {
+        private MenuButton(Button.Builder builder) { super(builder); }
+        @Override protected void extractContents(GuiGraphicsExtractor g, int mx, int my, float partial) {
+            int fill = !active ? 0xFFC1B7AA : isHoveredOrFocused() ? 0xFFFFD59F : 0xFFE9C398;
+            panel(g, getX(), getY(), getWidth(), getHeight(), fill);
+            var font = Minecraft.getInstance().font;
+            g.text(font, getMessage(), getX() + (getWidth() - font.width(getMessage())) / 2,
+                    getY() + (getHeight() - font.lineHeight) / 2, active ? 0xFF493729 : 0xFF857C72, false);
         }
     }
     private boolean inCanvas(double x, double y) { return x >= 8 && x < width - 8 && y >= 57 && y < height - 70; }
     @Override public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float partial) {
-        g.fill(0, 0, width, height, 0x4818120D);
+        g.fill(0, 0, width, height, 0x3818120D);
+        panel(g, 5, 5, width - 10, 46, 0xEFE8CAA8);
+        panel(g, 5, height - 65, width - 10, 61, 0xEFE8CAA8);
         g.fill(0, 0, width, 3, ORANGE);
-        g.text(font, title, 12, 14, ORANGE);
-        g.textWithWordWrap(font, tr("scope"), 12, 32, width - 24, 0xFFD6BDA6);
+        g.text(font, title, 12, 14, 0xFF493729, false);
+        g.textWithWordWrap(font, tr("scope"), 12, 32, width - 24, 0xFF574535, false);
         g.fill(8, 57, width - 8, height - 70, 0x18241A12);
         g.outline(8, 57, width - 16, height - 127, 0xFF9B5625);
-        boxes.clear();
-        if (!nodes.isEmpty()) layout();
+        if (!nodes.isEmpty() && layoutDirty) layout();
         Box hovered = null;
         g.enableScissor(9, 58, width - 9, height - 71);
         g.pose().pushMatrix(); g.pose().translate((float)panX, (float)(57 + panY)); g.pose().scale((float)zoom);
@@ -174,11 +239,11 @@ public final class RecipeTreeScreen extends Screen {
             int parent = nodes.get(box.id()).parent();
             var p = byId.get(parent);
             if (p == null) continue;
-            int x1 = p.x() + CARD_WIDTH, y1 = p.y() + CARD_HEIGHT / 2;
-            int x2 = box.x(), y2 = box.y() + CARD_HEIGHT / 2, bend = x1 + 8;
-            g.horizontalLine(x1, bend, y1, 0xFFB86C2D);
-            g.verticalLine(bend, Math.min(y1, y2), Math.max(y1, y2), 0xFFB86C2D);
-            g.horizontalLine(bend, x2, y2, 0xFFB86C2D);
+            int x1 = p.x() + CARD_WIDTH / 2, y1 = p.y() + CARD_HEIGHT;
+            int x2 = box.x() + CARD_WIDTH / 2, y2 = box.y(), bend = y1 + 6;
+            g.verticalLine(x1, y1, bend, ORANGE);
+            g.horizontalLine(Math.min(x1, x2), Math.max(x1, x2), bend, ORANGE);
+            g.verticalLine(x2, bend, y2, ORANGE);
         }
         double x = (mx - panX) / zoom, y = (my - 57 - panY) / zoom;
         for (var box : boxes) {
@@ -186,31 +251,35 @@ public final class RecipeTreeScreen extends Screen {
                     || box.y() + CARD_HEIGHT < (58 - 57 - panY) / zoom || box.y() > (height - 71 - 57 - panY) / zoom) continue;
             var node = nodes.get(box.id());
             boolean banned = node.recipe() && excluded.contains(node.recipeId());
-            g.fill(box.x(), box.y(), box.x() + CARD_WIDTH, box.y() + CARD_HEIGHT, banned ? 0xBB412A22 : 0xAA37271A);
-            g.outline(box.x(), box.y(), CARD_WIDTH, CARD_HEIGHT, box.id() == selected ? 0xFFFFCA8A : ORANGE);
+            panel(g, box.x(), box.y(), CARD_WIDTH, CARD_HEIGHT, banned ? 0xE9BA9583 : 0xEFF3D4B1);
+            g.outline(box.x(), box.y(), CARD_WIDTH, CARD_HEIGHT, box.id() == selected ? 0xFFFFAA44 : 0xFFB78F65);
             if (!node.item().isEmpty()) { g.item(node.item(), box.x() + 5, box.y() + 5); g.itemDecorations(font, node.item(), box.x() + 5, box.y() + 5); }
-            g.text(font, font.plainSubstrByWidth(node.item().getHoverName().getString(), CARD_WIDTH - 28), box.x() + 24, box.y() + 8, 0xFFFFE8D0);
+            g.text(font, font.plainSubstrByWidth(node.item().getHoverName().getString(), CARD_WIDTH - 28), box.x() + 24, box.y() + 8, 0xFF392B20, false);
             if (node.recipe()) {
                 for (int slot = 0; slot < 9; slot++) {
-                    int sx = box.x() + 5 + slot % 3 * 16, sy = box.y() + 23 + slot / 3 * 16;
-                    g.fill(sx - 1, sy - 1, sx + 16, sy + 16, 0xFF21170F);
+                    int sx = box.x() + 5 + slot % 3 * 18, sy = box.y() + 23 + slot / 3 * 18;
+                    g.fill(sx - 1, sy - 1, sx + 16, sy + 16, 0xFF8D8173);
+                    g.horizontalLine(sx - 1, sx + 16, sy - 1, 0xFF685E54);
+                    g.verticalLine(sx - 1, sy - 1, sy + 16, 0xFF685E54);
+                    g.horizontalLine(sx - 1, sx + 16, sy + 16, 0xFFFFE9CE);
+                    g.verticalLine(sx + 16, sy - 1, sy + 16, 0xFFFFE9CE);
                     g.item(node.grid().get(slot), sx, sy);
                 }
-                g.text(font, tr(banned ? "disabled" : "allowed"), box.x() + 58, box.y() + 26, banned ? 0xFFFFAA88 : ORANGE);
-                g.text(font, font.plainSubstrByWidth(node.recipeId(), CARD_WIDTH - 62), box.x() + 58, box.y() + 39, 0xFFD6BDA6);
+                g.text(font, tr(banned ? "disabled" : "allowed"), box.x() + 63, box.y() + 26, banned ? 0xFF863D25 : 0xFF61401E, false);
+                g.text(font, font.plainSubstrByWidth(node.recipeId(), CARD_WIDTH - 67), box.x() + 63, box.y() + 39, 0xFF574535, false);
             } else {
                 boolean allDisabled = children.getOrDefault(box.id(), List.of()).stream()
                         .filter(i -> nodes.get(i).recipe()).allMatch(i -> excluded.contains(nodes.get(i).recipeId()));
                 boolean hasRecipes = children.getOrDefault(box.id(), List.of()).stream().anyMatch(i -> nodes.get(i).recipe());
-                var line = pending.containsKey(box.id()) ? tr("loading") : box.id() == 0 ? tr("root") : hasRecipes && allDisabled ? tr("all_disabled") : tr("note." + node.note());
-                g.textWithWordWrap(font, line, box.x() + 8, box.y() + 27, CARD_WIDTH - 16, ORANGE);
+                var line = sharedBranches.containsKey(box.id()) ? tr("shared") : pending.containsKey(box.id()) || loadQueue.contains(box.id()) ? tr("loading") : box.id() == 0 ? tr("root") : hasRecipes && allDisabled ? tr("all_disabled") : tr("note." + node.note());
+                g.textWithWordWrap(font, line, box.x() + 8, box.y() + 27, CARD_WIDTH - 16, 0xFF61401E, false);
             }
-            if (children.containsKey(box.id()) || (!node.recipe() && box.id() != 0 && node.note() == 0)) g.text(font, expanded.contains(box.id()) ? "[-]" : "[+]", box.x() + CARD_WIDTH - 24, box.y() + CARD_HEIGHT - 12, ORANGE);
+            if (children.containsKey(box.id()) || (!node.recipe() && box.id() != 0 && node.note() == 0 && !sharedBranches.containsKey(box.id()) && !complete.contains(box.id()))) g.text(font, expanded.contains(box.id()) ? "[-]" : "[+]", box.x() + CARD_WIDTH - 24, box.y() + CARD_HEIGHT - 12, ORANGE, false);
             if (inCanvas(mx, my) && x >= box.x() && x < box.x() + CARD_WIDTH && y >= box.y() && y < box.y() + CARD_HEIGHT) hovered = box;
         }
         g.pose().popMatrix(); g.disableScissor();
-        g.text(font, tr("count", excluded.size(), snapshot.excluded().size()), 12, height - 61, ORANGE);
-        g.textWithWordWrap(font, status.getString().isEmpty() ? tr("help") : status, 12, height - 46, width - 24, ORANGE);
+        g.text(font, tr("count", excluded.size(), snapshot.excluded().size()), 12, height - 61, 0xFF493729, false);
+        g.textWithWordWrap(font, status.getString().isEmpty() ? tr("help") : status, 12, height - 46, width - 24, 0xFF493729, false);
         super.extractRenderState(g, mx, my, partial);
         if (hovered != null) {
             var node = nodes.get(hovered.id());
@@ -227,9 +296,19 @@ public final class RecipeTreeScreen extends Screen {
         for (var box : boxes) if (x >= box.x() && x < box.x() + CARD_WIDTH && y >= box.y() && y < box.y() + CARD_HEIGHT) {
             selected = box.id(); updateButtons();
             var node = nodes.get(selected);
-            if (event.button() == 1 && node.recipe()) toggleSelected();
+            if ((event.button() == 1 || event.hasShiftDown()) && node.recipe()) toggleSelected();
+            else if (sharedBranches.containsKey(selected)) {
+                int target = sharedBranches.get(selected);
+                for (int ancestor = target; ancestor >= 0; ancestor = nodes.get(ancestor).parent()) expanded.add(ancestor);
+                layout();
+                for (var destination : boxes) if (destination.id() == target) {
+                    panX = width / 2.0 - (destination.x() + CARD_WIDTH / 2.0) * zoom;
+                    panY = 12 - destination.y() * zoom; selected = target; break;
+                }
+            }
             else if (!node.recipe() || doubleClick || y >= box.y() + CARD_HEIGHT - 18) {
-                if (!expanded.remove(selected)) { expanded.add(selected); requestBranch(selected); }
+                if (!expanded.remove(selected)) expanded.add(selected);
+                layoutDirty = true;
             }
             return true;
         }
@@ -246,7 +325,7 @@ public final class RecipeTreeScreen extends Screen {
     }
     @Override public boolean keyPressed(KeyEvent event) {
         if (event.key() == 61 || event.key() == 334) { zoom = Math.min(1.5, zoom + .1); return true; }
-        if (event.key() == 45 || event.key() == 333) { zoom = Math.max(.5, zoom - .1); return true; }
+        if (event.key() == 45 || event.key() == 333) { zoom = Math.max(.15, zoom - .1); return true; }
         if (event.key() == 32 && selected >= 0 && nodes.get(selected).recipe()) { toggleSelected(); return true; }
         return super.keyPressed(event);
     }

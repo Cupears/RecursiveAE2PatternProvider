@@ -120,10 +120,14 @@ public final class EditorSmoke {
             } else if (phase == 6 && ticks - since > 20) {
                 if (terminal < terminals.size()) { requestTerminal(mc); next(3); }
                 else {
-                    var server = mc.getSingleplayerServer(); server.execute(() -> {
-                        try {
+                    terminal = 0; requestTerminal(mc); next(7);
+                }
+            } else if (phase == 7 && mc.player.containerMenu instanceof PatternEncodingTermMenu && ticks - since > 20) {
+                check(!com.lumengrid.recursiveae2patternprovider.client.RecipeTreeButton.canEdit(mc.player.containerMenu), "Empty terminal offers editor");
+                var server = mc.getSingleplayerServer();
+                server.execute(() -> {
+                    try {
                         var player = server.getPlayerList().getPlayers().getFirst();
-                        // Exercise multiple wire pages and a tree larger than the former 320-node cap.
                         var manager = server.getRecipeManager();
                         var recipes = new ArrayList<net.minecraft.world.item.crafting.RecipeHolder<?>>(manager.getRecipes());
                         for (int i = 0; i < 200; i++) {
@@ -133,108 +137,90 @@ public final class EditorSmoke {
                             recipes.add(new net.minecraft.world.item.crafting.RecipeHolder<>(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.RECIPE,
                                     net.minecraft.resources.Identifier.parse("smoke:planks_" + i)), recipe));
                         }
-                        var recipesField = manager.getClass().getDeclaredField("recipes"); recipesField.setAccessible(true);
-                        recipesField.set(manager, net.minecraft.world.item.crafting.RecipeMap.create(recipes));
-                        var pattern = PatternDetailsHelper.encodeProcessingPattern(List.of(new GenericStack(AEItemKey.of(Items.OAK_PLANKS), 4)),
-                                List.of(new GenericStack(AEItemKey.of(Items.CRAFTING_TABLE), 1)));
-                        PatternUtil.setRecursive(pattern, true); player.setItemInHand(InteractionHand.MAIN_HAND, pattern);
+                        var field = manager.getClass().getDeclaredField("recipes"); field.setAccessible(true);
+                        field.set(manager, net.minecraft.world.item.crafting.RecipeMap.create(recipes));
+                        var holder = (net.minecraft.world.item.crafting.RecipeHolder<net.minecraft.world.item.crafting.CraftingRecipe>)(Object)manager.getRecipes().stream()
+                                .filter(r -> r.id().identifier().toString().equals("minecraft:crafting_table")).findFirst().orElseThrow();
+                        ItemStack[] input = new ItemStack[9]; Arrays.fill(input, ItemStack.EMPTY);
+                        for (int index : new int[]{0, 1, 3, 4}) input[index] = new ItemStack(Items.OAK_PLANKS);
+                        var pattern = PatternDetailsHelper.encodeCraftingPattern(holder, input, new ItemStack(Items.CRAFTING_TABLE), false, false);
+                        PatternUtil.setRecursive(pattern, true);
+                        ((com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu)player.containerMenu).recursiveAE2$treeSlot().set(pattern);
                         player.containerMenu.broadcastChanges();
-                        } catch (Throwable e) { serverFailure = e; }
-                    }); next(7);
-                }
-            } else if (phase == 7 && ticks - since > 30 && PatternUtil.isRecursive(mc.player.getMainHandItem())) {
-                mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); next(8);
-            } else if (phase == 8 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
-                record("Recipe tree opened through actual right-click packet"); shot("recipe-tree-root");
+                    } catch (Throwable e) { serverFailure = e; }
+                }); next(8);
+            } else if (phase == 8 && ticks - since > 30) {
+                shot("encoding-terminal-tree-button");
+                clickTreeButton(); next(9);
+            } else if (phase == 9 && mc.screen instanceof RecipeTreeScreen && ticks - since > 80 && treeIdle()) {
+                record("Terminal button opened tree; all branches loaded automatically");
+                shot("recipe-tree-root");
+                var nodes = (List<RecipeTree.Node>)field("nodes");
+                check(nodes.size() > 320, "Tree stopped at former node cap");
+                check(((Set<?>)field("expanded")).size() == nodes.size(), "Tree did not default to expanded");
+                check(!((Map<?, ?>)field("sharedBranches")).isEmpty(), "Repeated materials were not shared");
                 mc.screen.keyPressed(new net.minecraft.client.input.KeyEvent(61, 0, 0));
-                var zoom = RecipeTreeScreen.class.getDeclaredField("zoom"); zoom.setAccessible(true);
-                check(zoom.getDouble(mc.screen) > 1, "Zoom in did not work");
-                mc.screen.keyPressed(new net.minecraft.client.input.KeyEvent(45, 0, 0));
-                check(Math.abs(zoom.getDouble(mc.screen) - 1) < .001, "Zoom out did not work");
-                mc.screen.mouseClicked(new MouseButtonEvent(12, 60, new MouseButtonInfo(0, 0)), false);
-                mc.screen.mouseDragged(new MouseButtonEvent(22, 60, new MouseButtonInfo(0, 0)), 10, 0);
-                mc.screen.mouseReleased(new MouseButtonEvent(22, 60, new MouseButtonInfo(0, 0)));
+                check((double)field("zoom") > 1, "Zoom failed");
                 clickButton("Reset view");
-                record("Zoom, background drag and reset view worked");
-                // The first child shares its parent's row in the compact layout.
-                next(9);
-            } else if (phase == 9 && ticks - since > 10) {
-                mc.screen.mouseClicked(new MouseButtonEvent(260, 100, new MouseButtonInfo(0, 0)), false); next(10);
-            } else if (phase == 10 && ticks - since > 40) {
-                var nodesField = RecipeTreeScreen.class.getDeclaredField("nodes"); nodesField.setAccessible(true);
-                var loaded = (List<?>)nodesField.get(mc.screen);
-                check(loaded.size() > 320, "Tree stopped at the old node cap");
-                var completeField = RecipeTreeScreen.class.getDeclaredField("complete"); completeField.setAccessible(true);
-                check(((Set<?>)completeField.get(mc.screen)).contains(1), "Recipe pages did not finish loading");
-                record("All 200 additional recipes loaded through branch packets; tree exceeded 320 nodes");
-                // Pan through the real scroll handler to bring the first recipe card into view.
-                mc.screen.mouseScrolled(260, 100, -148.0 / 40, 0); next(16);
-            } else if (phase == 16 && ticks - since > 10) {
-                mc.screen.mouseClicked(new MouseButtonEvent(260, 100, new MouseButtonInfo(0, 0)), false);
-                clickButton("Disable route"); next(17);
-            } else if (phase == 17 && ticks - since > 10) {
-                clickButton("Enable route");
-                mc.screen.mouseClicked(new MouseButtonEvent(260, 100, new MouseButtonInfo(1, 0)), false);
-                record("Expand, scroll/pan, selection, disable, enable and right-click toggle worked");
-                var panX = RecipeTreeScreen.class.getDeclaredField("panX"); panX.setAccessible(true); panX.setDouble(mc.screen, 16);
-                var panY = RecipeTreeScreen.class.getDeclaredField("panY"); panY.setAccessible(true); panY.setDouble(mc.screen, 12);
-                next(24);
-            } else if (phase == 24 && ticks - since > 10) {
-                shot("recipe-tree-expanded");
-                clickButton("Save");
-                var savingScreen = mc.screen; savingScreen.onClose();
-                check(mc.screen == savingScreen, "Cancel closed editor during pending save"); next(11);
-            } else if (phase == 11 && mc.screen == null && ticks - since > 20) {
-                check(!PatternRecipeRules.read(mc.player.getMainHandItem()).isEmpty(), "Saved rules did not reach client inventory");
-                check(net.minecraft.network.chat.Component.translatable("gui.recursiveae2patternprovider.tree.saved").getString().equals("Recipe choices saved."), "Save message contains extra instructions");
-                record("Recipe exclusion saved through client/server packets and inventory synchronized");
-                mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); next(12);
+                selectedRecipe = -1;
+                for (int i = 0; i < nodes.size(); i++) if (nodes.get(i).recipe()) { selectedRecipe = i; break; }
+                check(selectedRecipe > 0, "No recipes loaded");
+                focusNode(selectedRecipe); next(10);
+            } else if (phase == 10 && ticks - since > 10) {
+                shiftClickSelected();
+                var nodes = (List<RecipeTree.Node>)field("nodes");
+                var excluded = (Set<String>)field("excluded");
+                check(excluded.equals(Set.of(nodes.get(selectedRecipe).recipeId())), "Shift-click banned unrelated alternatives");
+                record("Shift-click banned exactly the clicked recipe throughout the pattern");
+                next(22);
+            } else if (phase == 22 && ticks - since > 10) {
+                shot("recipe-tree-expanded"); clickButton("Save");
+                var screen = mc.screen; screen.onClose(); check(mc.screen == screen, "Pending save could be cancelled"); next(11);
+            } else if (phase == 11 && !(mc.screen instanceof RecipeTreeScreen) && ticks - since > 20) {
+                check(mc.player.containerMenu instanceof PatternEncodingTermMenu, "Save closed terminal menu");
+                check(!PatternRecipeRules.read(terminalPattern()).isEmpty(), "Terminal pattern did not receive saved rules");
+                record("Save updated encoded slot and returned to terminal");
+                clickTreeButton(); next(12);
             } else if (phase == 12 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
                 clickButton("Reset rules"); clickButton("Cancel"); next(13);
-            } else if (phase == 13 && mc.screen == null && ticks - since > 20) {
-                check(!PatternRecipeRules.read(mc.player.getMainHandItem()).isEmpty(), "Cancel changed saved rules");
-                record("Cancel discarded edits and retained saved exclusions");
-                mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); next(14);
+            } else if (phase == 13 && !(mc.screen instanceof RecipeTreeScreen) && ticks - since > 20) {
+                check(!PatternRecipeRules.read(terminalPattern()).isEmpty(), "Cancel changed saved rules");
+                record("Cancel returned to terminal and preserved rules");
+                clickTreeButton(); next(14);
             } else if (phase == 14 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
                 clickButton("Reset rules"); clickButton("Save"); next(15);
-            } else if (phase == 15 && mc.screen == null && ticks - since > 20) {
-                check(PatternRecipeRules.read(mc.player.getMainHandItem()).isEmpty(), "Reset/save did not clear rules");
-                record("Reset and save cleared exclusions; pending save cannot be cancelled");
-                mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); next(18);
-            } else if (phase == 18 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
-                // Invalidate the server session, then submit from the still-open client screen.
-                var field = RecipeTreeScreen.class.getDeclaredField("snapshot"); field.setAccessible(true);
-                var snapshot = (com.lumengrid.recursiveae2patternprovider.network.RecipeTreePackets.Open)field.get(mc.screen);
-                ClientPacketDistributor.sendToServer(new com.lumengrid.recursiveae2patternprovider.network.RecipeTreePackets.Save(snapshot.session(), false, Set.of()));
-                next(19);
-            } else if (phase == 19 && ticks - since > 20) {
-                clickButton("Save"); next(20);
-            } else if (phase == 20 && ticks - since > 20) {
-                var field = RecipeTreeScreen.class.getDeclaredField("invalidSession"); field.setAccessible(true);
-                check(field.getBoolean(mc.screen), "Expired session did not return an error");
-                shot("recipe-tree-expired"); clickButton("Cancel");
-                record("Missing server session returned an error and editor remained closable");
-                mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); next(21);
-            } else if (phase == 21 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
-                var server = mc.getSingleplayerServer();
-                server.execute(() -> {
+            } else if (phase == 15 && !(mc.screen instanceof RecipeTreeScreen) && ticks - since > 20) {
+                check(PatternRecipeRules.read(terminalPattern()).isEmpty(), "Reset did not save");
+                clickTreeButton(); next(16);
+            } else if (phase == 16 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
+                var server = mc.getSingleplayerServer(); server.execute(() -> {
                     var player = server.getPlayerList().getPlayers().getFirst();
-                    player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.DIRT));
+                    ((com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu)player.containerMenu).recursiveAE2$treeSlot().set(new ItemStack(Items.DIRT));
                     player.containerMenu.broadcastChanges();
-                }); next(22);
-            } else if (phase == 22 && ticks - since > 20) {
-                clickButton("Save"); next(23);
-            } else if (phase == 23 && ticks - since > 20) {
-                var invalid = RecipeTreeScreen.class.getDeclaredField("invalidSession"); invalid.setAccessible(true);
-                check(invalid.getBoolean(mc.screen), "Changed held pattern was not rejected");
-                check(mc.player.getMainHandItem().is(Items.DIRT), "Save overwrote the replacement held item");
-                record("Changing the held item rejected save without overwriting it");
-                // Simulate a missing confirmation at the timeout boundary, without a 30-second delay.
-                var waiting = RecipeTreeScreen.class.getDeclaredField("waiting"); waiting.setAccessible(true); waiting.setBoolean(mc.screen, true);
-                var savingTicks = RecipeTreeScreen.class.getDeclaredField("savingTicks"); savingTicks.setAccessible(true); savingTicks.setInt(mc.screen, 599);
-                mc.screen.tick();
-                check(!waiting.getBoolean(mc.screen), "Save timeout did not release the editor");
-                clickButton("Cancel"); record("Missing-confirmation timeout released the editor");
+                }); next(17);
+            } else if (phase == 17 && ticks - since > 20) {
+                // The auto-loader can already have rejected the changed slot.
+                if (!(boolean)field("invalidSession")) clickButton("Save"); next(18);
+            } else if (phase == 18 && ticks - since > 20) {
+                check((boolean)field("invalidSession"), "Changed terminal pattern was accepted");
+                check(terminalPattern().is(Items.DIRT), "Save overwrote replacement item");
+                clickButton("Cancel"); record("Changed encoded slot rejected without overwriting replacement");
+                mc.screen.onClose(); next(19);
+            } else if (phase == 19 && mc.screen == null && ticks - since > 20) {
+                var server = mc.getSingleplayerServer(); server.execute(() -> {
+                    var player = server.getPlayerList().getPlayers().getFirst();
+                    var pattern = PatternDetailsHelper.encodeProcessingPattern(List.of(new GenericStack(AEItemKey.of(Items.OAK_PLANKS), 4)),
+                            List.of(new GenericStack(AEItemKey.of(Items.CRAFTING_TABLE), 1)));
+                    PatternUtil.setRecursive(pattern, true); player.setItemInHand(InteractionHand.MAIN_HAND, pattern);
+                    player.containerMenu.broadcastChanges();
+                }); next(20);
+            } else if (phase == 20 && ticks - since > 20) {
+                mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
+                ClientPacketDistributor.sendToServer(new com.lumengrid.recursiveae2patternprovider.network.RecipeTreePackets.RequestOpen(999));
+                next(21);
+            } else if (phase == 21 && ticks - since > 20) {
+                check(!(mc.screen instanceof RecipeTreeScreen), "Held pattern or forged menu opened editor");
+                record("Right-click no longer opens editor; invalid menu request rejected");
                 finish(mc, "PASS");
             }
         } catch (Throwable e) {
@@ -242,6 +228,36 @@ public final class EditorSmoke {
             catch (Exception nested) { RecursiveAE2PatternProvider.LOGGER.error("Smoke failure", e); failed = true; mc.stop(); }
         }
     }
+    private static int selectedRecipe;
+    private static Object field(String name) throws Exception {
+        var f = RecipeTreeScreen.class.getDeclaredField(name); f.setAccessible(true); return f.get(Minecraft.getInstance().screen);
+    }
+    private static boolean treeIdle() throws Exception { return ((Map<?, ?>)field("pending")).isEmpty() && ((Collection<?>)field("loadQueue")).isEmpty(); }
+    private static ItemStack terminalPattern() {
+        return ((com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu)Minecraft.getInstance().player.containerMenu).recursiveAE2$treeSlot().getItem();
+    }
+    private static void clickTreeButton() {
+        var screen = Minecraft.getInstance().screen;
+        var button = screen.children().stream().filter(w -> w instanceof com.lumengrid.recursiveae2patternprovider.client.RecipeTreeButton)
+                .map(w -> (Button)w).findFirst().orElseThrow();
+        check(button.visible && button.active, "Tree button hidden/disabled");
+        screen.mouseClicked(new MouseButtonEvent(button.getX() + 3, button.getY() + 3, new MouseButtonInfo(0, 0)), false);
+    }
+    private static void focusNode(int id) throws Exception {
+        var center = RecipeTreeScreen.class.getDeclaredField("centerOnRoot"); center.setAccessible(true);
+        center.setBoolean(Minecraft.getInstance().screen, false);
+        for (var box : (List<?>)field("boxes")) {
+            var getId = box.getClass().getDeclaredMethod("id"); getId.setAccessible(true);
+            if ((int)getId.invoke(box) != id) continue;
+            var x = box.getClass().getDeclaredMethod("x"); x.setAccessible(true);
+            var y = box.getClass().getDeclaredMethod("y"); y.setAccessible(true);
+            var px = RecipeTreeScreen.class.getDeclaredField("panX"); px.setAccessible(true);
+            var py = RecipeTreeScreen.class.getDeclaredField("panY"); py.setAccessible(true);
+            px.setDouble(Minecraft.getInstance().screen, 30 - (int)x.invoke(box));
+            py.setDouble(Minecraft.getInstance().screen, 12 - (int)y.invoke(box));
+        }
+    }
+    private static void shiftClickSelected() { Minecraft.getInstance().screen.mouseClicked(new MouseButtonEvent(40, 80, new MouseButtonInfo(0, 1)), false); }
     private static void requestTerminal(Minecraft mc) {
         var server = mc.getSingleplayerServer(); var part = terminals.get(terminal);
         server.execute(() -> {

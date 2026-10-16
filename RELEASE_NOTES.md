@@ -1,1 +1,1 @@
-Shortened the save confirmation. Made the editor background transparent, reduced card sizes and tightened branch spacing. Removed the preview's total node, recipe-count and depth cutoffs by loading branches on demand.
+Moved the recipe editor into pattern terminals. Trees open expanded, with the main item above its dependencies, light-orange AE2-style panels and links for shared ingredients. Shift-click toggles a recipe throughout the edited pattern. Save updates the terminal pattern and returns to the terminal.

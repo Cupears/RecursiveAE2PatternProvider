@@ -14,10 +14,13 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = WirelessComprehensiveWorkTerminalMenu.class, remap = false)
-public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRecursivePatternMenu {
+public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRecursivePatternMenu, com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu {
     @org.spongepowered.asm.mixin.Shadow
     private appeng.menu.slot.RestrictedInputSlot encodedPatternSlot;
 
+
+    @Override
+    public net.minecraft.world.inventory.Slot recursiveAE2$treeSlot() { return encodedPatternSlot; }
 
     @Unique
     @GuiSync(com.lumengrid.recursiveae2patternprovider.menu.RecursiveMenuSync.RECURSIVE_MODE)

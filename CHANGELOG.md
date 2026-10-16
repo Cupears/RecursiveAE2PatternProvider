@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0-beta.5
+
+- Moved the editor to a Configure recipe tree button in pattern terminals.
+- Trees open expanded and load automatically, with the main item above its dependencies.
+- Added light-orange AE2-style panels and shared-ingredient links.
+- Shift-click toggles the selected recipe throughout the edited pattern, preserving alternatives.
+- Save and Cancel return to the terminal; saving checks the encoded pattern still matches.
+
 ## 1.2.0-beta.4
 
 - Shortened the save confirmation to "Recipe choices saved."
