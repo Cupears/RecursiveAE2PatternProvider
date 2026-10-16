@@ -88,8 +88,9 @@ public abstract class AdvPatternProviderLogicMixin implements RefreshingRecursiv
 
             recursiveAE2$hasRecursivePatterns = !recursivePatterns.isEmpty();
 
+            var bans = RecursivePatternGenerator.collectBans(this.patternInventory);
             List<IPatternDetails> generated =
-                    RecursivePatternGenerator.generate(recursivePatterns, this.patterns, level, maxDepth);
+                    RecursivePatternGenerator.generate(recursivePatterns, this.patterns, level, maxDepth, bans);
 
             RecursivePatternGenerator.appendGenerated(generated, this.patterns, this.patternInputs);
 

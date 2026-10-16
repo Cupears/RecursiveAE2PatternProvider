@@ -6,6 +6,9 @@ import appeng.client.gui.me.items.CraftingEncodingPanel;
 import appeng.client.gui.me.items.PatternEncodingTermScreen;
 import appeng.client.gui.widgets.ToggleButton;
 import com.lumengrid.recursiveae2patternprovider.Config;
+import com.lumengrid.recursiveae2patternprovider.client.CraftingTreeScreen;
+import com.lumengrid.recursiveae2patternprovider.client.InspectButton;
+import com.lumengrid.recursiveae2patternprovider.menu.IInspectablePatternMenu;
 import com.lumengrid.recursiveae2patternprovider.menu.IRecursivePatternMenu;
 import com.lumengrid.recursiveae2patternprovider.network.ToggleRecursiveModeC2SPacket;
 import net.minecraft.client.Minecraft;
@@ -30,6 +33,9 @@ public abstract class CraftingEncodingPanelMixin {
 
     @Unique
     private ToggleButton recursiveBtn;
+
+    @Unique
+    private InspectButton inspectBtn;
 
     @Inject(method = "<init>", at = @At("TAIL"))
     private void addRecursiveButton(PatternEncodingTermScreen<?> screen, WidgetContainer widgets, CallbackInfo ci) {
@@ -57,6 +63,14 @@ public abstract class CraftingEncodingPanelMixin {
                 Component.translatable("gui.recursiveae2patternprovider.button.recursive_off"),
                 Component.translatable("gui.recursiveae2patternprovider.button.recursive_desc_off")
         ));
+
+        this.inspectBtn = new InspectButton(btn -> {
+            if (screen.getMenu() instanceof IInspectablePatternMenu) {
+                CraftingTreeScreen.requestAndOpen(screen.getMenu().containerId);
+            }
+        });
+        this.inspectBtn.setHalfSize(true);
+        this.inspectBtn.setDisableBackground(true);
     }
 
     @Inject(method = "updateBeforeRender", at = @At("TAIL"))
@@ -64,6 +78,9 @@ public abstract class CraftingEncodingPanelMixin {
         if (!Config.ENABLE.get() || !Config.ENABLE_ENCODING_GUI_TOGGLE.get()) {
             if (this.recursiveBtn != null) {
                 this.recursiveBtn.setVisibility(false);
+            }
+            if (this.inspectBtn != null) {
+                this.inspectBtn.setVisibility(false);
             }
             return;
         }
@@ -83,13 +100,35 @@ public abstract class CraftingEncodingPanelMixin {
                 }
             }
         }
+
+        if (this.inspectBtn != null && this.recursiveBtn != null) {
+            this.inspectBtn.setX(this.recursiveBtn.getX() + 10);
+            this.inspectBtn.setY(this.recursiveBtn.getY());
+            // Only offer inspection once there is a recursive pattern in the encoded slot to walk.
+            boolean hasPattern = this.panelScreen.getMenu() instanceof IInspectablePatternMenu menu
+                    && !menu.recursiveAE2$getInspectPattern().isEmpty();
+            this.inspectBtn.setVisibility(hasPattern);
+
+            if (this.panelScreen != null) {
+                ScreenAccessor accessor = (ScreenAccessor) this.panelScreen;
+                if (!accessor.getRenderables().contains(this.inspectBtn)) {
+                    accessor.getRenderables().add(this.inspectBtn);
+                }
+                if (!accessor.getChildren().contains(this.inspectBtn)) {
+                    accessor.getChildren().add(this.inspectBtn);
+                }
+            }
+        }
     }
 
     @Inject(method = "setVisible", at = @At("TAIL"))
     private void onSetVisible(boolean visible, CallbackInfo ci) {
+        boolean enabled = Config.ENABLE.get() && Config.ENABLE_ENCODING_GUI_TOGGLE.get();
         if (this.recursiveBtn != null) {
-            boolean shouldBeVisible = visible && Config.ENABLE.get() && Config.ENABLE_ENCODING_GUI_TOGGLE.get();
-            this.recursiveBtn.setVisibility(shouldBeVisible);
+            this.recursiveBtn.setVisibility(visible && enabled);
+        }
+        if (this.inspectBtn != null && !(visible && enabled)) {
+            this.inspectBtn.setVisibility(false);
         }
     }
 }

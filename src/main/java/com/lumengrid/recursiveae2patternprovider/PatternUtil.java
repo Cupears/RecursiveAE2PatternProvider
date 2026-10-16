@@ -53,6 +53,31 @@ public class PatternUtil {
         else pattern.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
     }
 
+    /** Recipe bans the player stored on this pattern; {@link RecipeBans#EMPTY} if none. */
+    public static RecipeBans getBans(ItemStack patternStack) {
+        if (patternStack.isEmpty()) {
+            return RecipeBans.EMPTY;
+        }
+        try {
+            var customData = patternStack.get(DataComponents.CUSTOM_DATA);
+            if (customData != null) {
+                return RecipeBans.readTag(customData.copyTag());
+            }
+        } catch (Exception e) {
+            RecursiveAE2PatternProvider.LOGGER.debug("Failed to read recipe bans: {}", e.getMessage());
+        }
+        return RecipeBans.EMPTY;
+    }
+
+    /** Store (or clear) recipe bans without discarding unrelated item data. */
+    public static void setBans(ItemStack pattern, RecipeBans bans) {
+        var existingData = pattern.get(DataComponents.CUSTOM_DATA);
+        CompoundTag tag = existingData != null ? existingData.copyTag() : new CompoundTag();
+        bans.writeTag(tag);
+        if (tag.isEmpty()) pattern.remove(DataComponents.CUSTOM_DATA);
+        else pattern.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+    }
+
     public static ItemStack createRecursivePattern(ItemStack originalPattern) {
         try {
             ItemStack newPattern = originalPattern.copy();

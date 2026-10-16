@@ -84,12 +84,14 @@ public final class RecursivePatternGenerator {
         final Set<Item> ancestors = new HashSet<>();
         final List<IPatternDetails> generated = new ArrayList<>();
         final RecipeSelection selection;
+        final RecipeBans bans;
 
-        Context(Level level, int maxDepth, Map<Item, List<RecipeHolder<CraftingRecipe>>> index, Settings settings) {
+        Context(Level level, int maxDepth, Map<Item, List<RecipeHolder<CraftingRecipe>>> index, Settings settings, RecipeBans bans) {
             this.level = level;
             this.maxDepth = maxDepth;
             this.index = index;
             this.settings = settings;
+            this.bans = bans;
             this.selection = new RecipeSelection(index, getFurnaceOutputs(level.getServer().getRecipeManager()),
                     r -> !settings.isBlacklisted(r.id().identifier())
                             && (!settings.skipSelfReferential() || !usesItem(r.value(),
@@ -177,19 +179,73 @@ public final class RecursivePatternGenerator {
         return recursivePatterns;
     }
 
+    /** Merge the recipe bans the player stored on each recursive pattern in an inventory. */
+    public static RecipeBans collectBans(Iterable<ItemStack> patternInventory) {
+        if (patternInventory == null) {
+            return RecipeBans.EMPTY;
+        }
+        List<RecipeBans> parts = new ArrayList<>();
+        for (ItemStack stack : patternInventory) {
+            if (PatternUtil.isRecursive(stack)) {
+                RecipeBans bans = PatternUtil.getBans(stack);
+                if (!bans.isEmpty()) {
+                    parts.add(bans);
+                }
+            }
+        }
+        return RecipeBans.merge(parts);
+    }
+
+    /** The shared output-item -> crafting-recipes index, exposed for the tree inspector. */
+    public static Map<Item, List<RecipeHolder<CraftingRecipe>>> recipeIndex(Level level) {
+        return getRecipeIndex(level);
+    }
+
+    /** The recipe's ingredients laid out on a 3x3 grid, preserving empty slots. */
+    public static ItemStack[] recipeGrid(CraftingRecipe recipe) {
+        return getRecipeInputsAs3x3Grid(recipe);
+    }
+
+    /**
+     * Whether a recipe is eligible to make {@code target} under the current config
+     * (blacklist + self-referential rules + output match), ignoring player bans.
+     * Used by the inspector, which shows banned recipes rather than hiding them.
+     */
+    public static boolean isSelectableRecipe(RecipeHolder<CraftingRecipe> holder, Item target) {
+        Settings settings = Settings.fromConfig();
+        if (settings.isBlacklisted(holder.id().identifier())) {
+            return false;
+        }
+        try {
+            ItemStack output = holder.value().assemble(CraftingInput.EMPTY);
+            if (output.isEmpty() || !output.is(target)) {
+                return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return !settings.skipSelfReferential() || !usesItem(holder.value(), target);
+    }
+
     public static List<IPatternDetails> generate(List<IPatternDetails> recursivePatterns,
                                                  Level level, int maxDepth) {
-        return generate(recursivePatterns, List.of(), level, maxDepth);
+        return generate(recursivePatterns, List.of(), level, maxDepth, RecipeBans.EMPTY);
     }
 
     public static List<IPatternDetails> generate(List<IPatternDetails> recursivePatterns,
                                                  Collection<IPatternDetails> existingPatterns,
                                                  Level level, int maxDepth) {
+        return generate(recursivePatterns, existingPatterns, level, maxDepth, RecipeBans.EMPTY);
+    }
+
+    public static List<IPatternDetails> generate(List<IPatternDetails> recursivePatterns,
+                                                 Collection<IPatternDetails> existingPatterns,
+                                                 Level level, int maxDepth, RecipeBans bans) {
         if (level == null || level.isClientSide() || recursivePatterns.isEmpty()) {
             return new ArrayList<>();
         }
 
-        Context ctx = new Context(level, maxDepth, getRecipeIndex(level), Settings.fromConfig());
+        Context ctx = new Context(level, maxDepth, getRecipeIndex(level), Settings.fromConfig(), bans);
 
         if (existingPatterns != null) {
             for (IPatternDetails existing : existingPatterns) {
@@ -282,10 +338,12 @@ public final class RecursivePatternGenerator {
         var choices = ctx.settings.retainAlternatives()
                 ? ctx.selection.alternatives(targetType, ctx.ancestors)
                 : ctx.selection.rank(targetType, ctx.ancestors);
+        String targetId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(targetType).toString();
         List<RecipeHolder<CraftingRecipe>> ordered = choices.stream()
                 .map(RecipeSelection.Choice::recipe)
                 .filter(r -> !ctx.processedRecipes.contains(r.id().toString()))
                 .filter(r -> !ctx.settings.isBlacklisted(r.id().identifier()))
+                .filter(r -> !ctx.bans.isBanned(targetId, r.id().identifier().toString()))
                 .filter(r -> !ctx.settings.skipSelfReferential() || !usesItem(r.value(), targetType))
                 .toList();
 

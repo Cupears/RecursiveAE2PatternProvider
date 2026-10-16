@@ -65,12 +65,14 @@ public abstract class SuperAssemblerMatrixClusterMixin {
 
             // Recursive patterns from every hybrid core, limited to what the matrix can execute.
             List<IPatternDetails> recursivePatterns = new ArrayList<>();
+            List<com.lumengrid.recursiveae2patternprovider.RecipeBans> banParts = new ArrayList<>();
             for (InternalInventory inventory : self.getPatternInventories()) {
                 for (IPatternDetails details : RecursivePatternGenerator.collectRecursivePatterns(inventory, level)) {
                     if (details instanceof IMolecularAssemblerSupportedPattern) {
                         recursivePatterns.add(details);
                     }
                 }
+                banParts.add(RecursivePatternGenerator.collectBans(inventory));
             }
             if (recursivePatterns.isEmpty()) {
                 return;
@@ -79,7 +81,8 @@ public abstract class SuperAssemblerMatrixClusterMixin {
             // The original list holds all patterns the user put in the matrix:
             // the generator will not create alternatives for items already covered.
             List<IPatternDetails> generated =
-                    RecursivePatternGenerator.generate(recursivePatterns, original, level, maxDepth);
+                    RecursivePatternGenerator.generate(recursivePatterns, original, level, maxDepth,
+                            com.lumengrid.recursiveae2patternprovider.RecipeBans.merge(banParts));
             if (generated.isEmpty()) {
                 return;
             }

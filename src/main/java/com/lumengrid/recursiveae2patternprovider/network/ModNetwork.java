@@ -13,5 +13,23 @@ public class ModNetwork {
                 ToggleRecursiveModeC2SPacket.STREAM_CODEC,
                 ToggleRecursiveModeC2SPacket::handle
         );
+
+        registrar.playToClient(
+                CraftingTreeS2CPacket.TYPE,
+                CraftingTreeS2CPacket.STREAM_CODEC,
+                CraftingTreeS2CPacket::handle
+        );
+
+        registrar.playToServer(
+                RequestCraftingTreeC2SPacket.TYPE,
+                RequestCraftingTreeC2SPacket.STREAM_CODEC,
+                RequestCraftingTreeC2SPacket::handle
+        );
+
+        registrar.playToServer(
+                ToggleRecipeBanC2SPacket.TYPE,
+                ToggleRecipeBanC2SPacket.STREAM_CODEC,
+                ToggleRecipeBanC2SPacket::handle
+        );
     }
 }
