@@ -95,4 +95,4 @@ On Windows, use `gradlew.bat build`. The installable JAR is written to `build/li
 
 Original mod by **Lumengrid (Lumengrid89)**. I maintain this independent fork as **Cupears**; my changes are described above and in [CHANGELOG.md](CHANGELOG.md). This fork is not an official upstream release. My individual contributions remain available as separate upstream pull requests.
 
-I keep this fork under [Creative Commons Attribution 4.0 International (CC BY 4.0)](LICENSE.txt), matching the author's [published mod license](https://www.curseforge.com/minecraft/mc-mods/recursive-ae2-pattern-provider/license). See [NOTICE.md](NOTICE.md) for attribution. The NeoForge MDK template retains its separate [MIT license](TEMPLATE_LICENSE.txt).
+I keep this fork under [CC BY 4.0](LICENSE.txt). The NeoForge MDK template retains its separate [MIT license](TEMPLATE_LICENSE.txt).
