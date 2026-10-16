@@ -21,6 +21,10 @@ public class RecursiveAE2MixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (mixinClassName.endsWith("WirelessComprehensiveWorkTerminalMenuMixin")
+                || mixinClassName.endsWith("WirelessComprehensiveWorkTerminalScreenMixin")) {
+            return FMLLoader.getCurrent().getLoadingModList().getModFileById("wcwt") != null;
+        }
         if (mixinClassName.contains("TileAssemblerMatrixPatternMixin")) {
             boolean isExtendedAELoaded = FMLLoader.getCurrent().getLoadingModList().getModFileById("extendedae") != null;
             if (!isExtendedAELoaded) {

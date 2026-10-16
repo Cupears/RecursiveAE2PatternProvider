@@ -15,11 +15,11 @@ public abstract class CraftConfirmTableRendererMixin {
     @Inject(method = "getEntryTooltip(Lappeng/menu/me/crafting/CraftingPlanSummaryEntry;)Ljava/util/List;", at = @At("RETURN"), cancellable = true)
     private void recursiveAE2$explainSource(CraftingPlanSummaryEntry entry, CallbackInfoReturnable<List<Component>> cir) {
         var player = Minecraft.getInstance().player;
-        if (entry.getMissingAmount() <= 0 || player == null || !(player.containerMenu instanceof IPlanExplanationMenu menu)) return;
+        if (player == null || !(player.containerMenu instanceof IPlanExplanationMenu menu)) return;
         var products = menu.recursiveAE2$getExplanation().get(entry.getWhat());
         if (products == null || products.isEmpty()) return;
         var lines = new ArrayList<>(cir.getReturnValue());
-        lines.add(Component.translatable("gui.recursiveae2patternprovider.plan.source").withColor(0xFF9A32));
+        if (entry.getMissingAmount() > 0) lines.add(Component.translatable("gui.recursiveae2patternprovider.plan.source").withColor(0xFF9A32));
         for (var product : products) {
             lines.add(Component.translatable("gui.recursiveae2patternprovider.plan.produces", product.getDisplayName()).withColor(0xFF9A32));
         }

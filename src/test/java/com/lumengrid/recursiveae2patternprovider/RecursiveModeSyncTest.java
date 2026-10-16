@@ -44,6 +44,39 @@ class RecursiveModeSyncTest {
         }
     }
 
+    @Test
+    void explicitOffClearsRecursiveFlagAndPreservesOtherData(MinecraftServer server) {
+        var pattern = new net.minecraft.world.item.ItemStack(appeng.core.definitions.AEItems.CRAFTING_PATTERN.asItem());
+        var tag = new net.minecraft.nbt.CompoundTag();
+        tag.putString("owner", "Cupears");
+        pattern.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+        PatternUtil.setRecursive(pattern, true);
+        assertTrue(PatternUtil.isRecursive(pattern));
+        PatternUtil.setRecursive(pattern, false);
+        assertFalse(PatternUtil.isRecursive(pattern));
+        assertEquals("Cupears", pattern.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA).copyTag().getString("owner").orElseThrow());
+        assertFalse(pattern.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA).copyTag().contains("recursive"));
+    }
+
+    @Test
+    void explicitOffLeavesNoEmptyCustomData(MinecraftServer server) {
+        var original = new net.minecraft.world.item.ItemStack(appeng.core.definitions.AEItems.CRAFTING_PATTERN.asItem());
+        var recursive = PatternUtil.createRecursivePattern(original);
+        assertFalse(PatternUtil.isRecursive(original));
+        assertTrue(PatternUtil.isRecursive(recursive));
+        PatternUtil.setRecursive(recursive, false);
+        assertNull(recursive.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA));
+    }
+
+    @Test
+    void absentWirelessTerminalSkipsBothIntegrationMixins(MinecraftServer server) {
+        assertNull(net.neoforged.fml.loading.FMLLoader.getCurrent().getLoadingModList().getModFileById("wcwt"));
+        var plugin = new com.lumengrid.recursiveae2patternprovider.mixin.RecursiveAE2MixinPlugin();
+        assertFalse(plugin.shouldApplyMixin("com.lhy.wcwt.menu.WirelessComprehensiveWorkTerminalMenu", "com.lumengrid.recursiveae2patternprovider.mixin.WirelessComprehensiveWorkTerminalMenuMixin"));
+        assertFalse(plugin.shouldApplyMixin("com.lhy.wcwt.client.gui.WirelessComprehensiveWorkTerminalScreen", "com.lumengrid.recursiveae2patternprovider.mixin.client.WirelessComprehensiveWorkTerminalScreenMixin"));
+        assertTrue(plugin.shouldApplyMixin("appeng.menu.me.items.PatternEncodingTermMenu", "com.lumengrid.recursiveae2patternprovider.mixin.PatternEncodingTermMenuMixin"));
+    }
+
     private static IRecursivePatternMenu emptyMenu() throws Exception {
         // Exercise the actual transformed menu and AE2 field codec without opening a world GUI.
         var field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");

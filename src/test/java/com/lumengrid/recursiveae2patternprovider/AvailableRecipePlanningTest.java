@@ -121,6 +121,29 @@ class AvailableRecipePlanningTest {
     }
 
     @Test
+    void successfulPlanExplainsWoodAndCraftedIntermediate(MinecraftServer server) throws Exception {
+        var planks = processing(List.of(new GenericStack(AEItemKey.of(Items.OAK_LOG), 1)), Items.OAK_PLANKS, 4);
+        var chest = processing(List.of(new GenericStack(AEItemKey.of(Items.OAK_PLANKS), 8)), Items.CHEST, 1);
+        PlanExplanation.registerGenerated(planks);
+        PlanExplanation.registerGenerated(chest);
+        var plan = calculate(List.of(planks, chest), Map.of(Items.OAK_LOG, 2L), Items.CHEST, 1);
+        assertFalse(plan.simulation());
+        var explanation = PlanExplanation.analyze(plan);
+        assertEquals(List.of(AEItemKey.of(Items.OAK_PLANKS)), explanation.get(AEItemKey.of(Items.OAK_LOG)));
+        assertEquals(List.of(AEItemKey.of(Items.CHEST)), explanation.get(AEItemKey.of(Items.OAK_PLANKS)));
+        assertFalse(explanation.containsKey(AEItemKey.of(Items.DARK_OAK_LOG)));
+    }
+
+    @Test
+    void flexibleInputsDoNotClaimAnUnprovenWoodChoice(MinecraftServer server) throws Exception {
+        var chest = flexibleWood(processing(List.of(new GenericStack(AEItemKey.of(Items.DARK_OAK_PLANKS), 8)), Items.CHEST, 1));
+        PlanExplanation.registerGenerated(chest);
+        var plan = calculate(List.of(chest), Map.of(Items.OAK_PLANKS, 8L), Items.CHEST, 1);
+        assertFalse(plan.simulation());
+        assertTrue(PlanExplanation.analyze(plan).isEmpty());
+    }
+
+    @Test
     void doesNotAnnotateManuallyEncodedPatterns(MinecraftServer server) throws Exception {
         var manual = pattern(Items.DIRT, 1, 1);
         var plan = calculate(List.of(manual), Map.of(), 1);

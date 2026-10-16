@@ -43,15 +43,21 @@ public class PatternUtil {
         return false;
     }
 
+    /** Apply the current terminal choice without discarding unrelated item data. */
+    public static void setRecursive(ItemStack pattern, boolean enabled) {
+        var existingData = pattern.get(DataComponents.CUSTOM_DATA);
+        CompoundTag tag = existingData != null ? existingData.copyTag() : new CompoundTag();
+        if (enabled) tag.putBoolean("recursive", true);
+        else tag.remove("recursive");
+        if (tag.isEmpty()) pattern.remove(DataComponents.CUSTOM_DATA);
+        else pattern.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+    }
+
     public static ItemStack createRecursivePattern(ItemStack originalPattern) {
         try {
             ItemStack newPattern = originalPattern.copy();
 
-            var existingData = newPattern.get(DataComponents.CUSTOM_DATA);
-            CompoundTag customData = existingData != null ? existingData.copyTag() : new CompoundTag();
-            customData.putBoolean("recursive", true);
-
-            newPattern.set(DataComponents.CUSTOM_DATA, CustomData.of(customData));
+            setRecursive(newPattern, true);
 
             return newPattern;
 
