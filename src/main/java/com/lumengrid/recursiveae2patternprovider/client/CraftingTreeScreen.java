@@ -1,6 +1,7 @@
 package com.lumengrid.recursiveae2patternprovider.client;
 
 import com.lumengrid.recursiveae2patternprovider.CraftingTreeData;
+import com.lumengrid.recursiveae2patternprovider.RecursiveAE2PatternProvider;
 import com.lumengrid.recursiveae2patternprovider.network.RequestCraftingTreeC2SPacket;
 import com.lumengrid.recursiveae2patternprovider.network.ToggleRecipeBanC2SPacket;
 import net.minecraft.ChatFormatting;
@@ -29,11 +30,12 @@ import java.util.Map;
  *
  * <p>Interaction: left-click a recipe card to ban that {@code (item, recipe)} edge; shift-left-click
  * to ban the recipe everywhere. Drag empty space (or use the mouse wheel) to pan. Hold control and
- * scroll to zoom in and out. The root pattern's own card is shown for context but cannot be banned.
+ * scroll to zoom toward the cursor. The root pattern's own card is shown for context but cannot be
+ * banned.
  */
 public class CraftingTreeScreen extends Screen {
 
-    // Card / layout geometry (world units, before panning / zooming).
+    // Card / layout geometry (world units, at zoom 1.0).
     private static final int SLOT = 9;
     private static final int GRID = SLOT * 3;
     private static final int CARD_W = 82;
@@ -46,7 +48,8 @@ public class CraftingTreeScreen extends Screen {
     // Zoom.
     private static final double ZOOM_MIN = 0.5;
     private static final double ZOOM_MAX = 2.0;
-    private static final double ZOOM_STEP = 0.25;
+    private static final double ZOOM_STEP_SCROLL = 0.10;
+    private static final double ZOOM_STEP_BUTTON = 0.25;
 
     // Colors (ARGB).
     private static final int COL_PANEL = 0xC0101014;
@@ -67,21 +70,16 @@ public class CraftingTreeScreen extends Screen {
 
     // Layout, recomputed whenever the tree changes (world units).
     private final Map<Integer, int[]> itemRects = new HashMap<>();   // itemIndex -> {x, y, w, h}
-    private final List<CardHit> cardHits = new ArrayList<>();        // recipe cards, screen space
+    private final List<CardHit> cardHits = new ArrayList<>();        // recipe cards, world units
 
+    // Pan in screen pixels; applied as a pose translation.
     private double panX;
     private double panY;
     private boolean dragging;
     private boolean panInitialised;
 
-    // Zoom factor (1.0 = 100%). Applied around the viewport centre; pan stays in screen space.
+    // Zoom factor (1.0 = 100%). Zooms around an anchor point.
     private double zoom = 1.0;
-    // Per-frame derived values: offset added by the zoom pose's centre, and pan expressed in
-    // world units so a single pose scale around the viewport centre handles both.
-    private float zoomOffX;
-    private float zoomOffY;
-    private float panWorldX;
-    private float panWorldY;
 
     private record CardHit(int recipeIndex, int x, int y, int w, int h) {}
 
@@ -114,31 +112,43 @@ public class CraftingTreeScreen extends Screen {
                 .bounds(this.width - w - 8, this.height - 28, w, 20)
                 .build());
 
-        // Zoom controls (top right).
+        // Zoom controls (top right), laid out right-to-left.
         int right = this.width - 8;
-        addRenderableWidget(Button.builder(Component.literal("−"), b -> zoom(-ZOOM_STEP))
-                .bounds(right - 150, 6, 20, 16).build());
-        addRenderableWidget(Button.builder(Component.literal("+"), b -> zoom(ZOOM_STEP))
-                .bounds(right - 124, 6, 20, 16).build());
-        addRenderableWidget(Button.builder(Component.literal("Reset"), b -> setZoom(1.0))
-                .bounds(right - 74, 6, 36, 16).build());
+        int btnW = 22, btnH = 18, gap = 6;
+        int resetW = 44;
+        int resetX = right - resetW;
+        int minusX = resetX - gap - btnW;
+        int plusX = minusX - gap - btnW;
+        addRenderableWidget(Button.builder(Component.literal("+"),
+                b -> zoomAt(ZOOM_STEP_BUTTON, this.width / 2, this.height / 2))
+                .bounds(plusX, 6, btnW, btnH).build());
+        addRenderableWidget(Button.builder(Component.literal("−"),
+                b -> zoomAt(-ZOOM_STEP_BUTTON, this.width / 2, this.height / 2))
+                .bounds(minusX, 6, btnW, btnH).build());
+        addRenderableWidget(Button.builder(Component.literal("Reset"),
+                b -> setZoom(1.0, this.width / 2, this.height / 2))
+                .bounds(resetX, 6, resetW, btnH).build());
     }
 
     // ----- zoom -----------------------------------------------------------------------------------
 
-    private void zoom(double delta) {
-        setZoom(Math.clamp(zoom + delta, ZOOM_MIN, ZOOM_MAX));
+    private void zoomAt(double delta, int anchorX, int anchorY) {
+        setZoom(Math.clamp(zoom + delta, ZOOM_MIN, ZOOM_MAX), anchorX, anchorY);
     }
 
-    private void setZoom(double next) {
-        // Re-anchor pan so the point under the mouse (viewport centre) stays put when zooming.
+    /** Set zoom while keeping the screen point {@code (anchorX, anchorY)} fixed on the same world point. */
+    private void setZoom(double next, int anchorX, int anchorY) {
         double prev = this.zoom;
         this.zoom = Math.clamp(next, ZOOM_MIN, ZOOM_MAX);
         if (prev != this.zoom) {
-            int cx = this.width / 2;
-            int cy = this.height / 2;
-            panX += cx * (1.0 / this.zoom - 1.0 / prev);
-            panY += cy * (1.0 / this.zoom - 1.0 / prev);
+            double cx = this.width / 2.0;
+            double cy = this.height / 2.0;
+            // World point currently under the anchor.
+            double worldX = cx + (anchorX - cx - panX) / prev;
+            double worldY = cy + (anchorY - cy - panY) / prev;
+            // Re-anchor pan so that world point stays at the same screen anchor.
+            panX = anchorX - cx - (worldX - cx) * this.zoom;
+            panY = anchorY - cy - (worldY - cy) * this.zoom;
         }
     }
 
@@ -206,22 +216,28 @@ public class CraftingTreeScreen extends Screen {
 
         int cx = this.width / 2;
         int cy = this.height / 2;
-        zoomOffX = cx * (1f - (float) zoom);
-        zoomOffY = cy * (1f - (float) zoom);
-        panWorldX = (float) (panX / zoom);
-        panWorldY = (float) (panY / zoom);
 
-        // Zoom around the viewport centre; pan is added in world units (pan / zoom) so it scales
-        // correctly with the pose. The header / legend / buttons are drawn unscaled afterwards.
-        g.pose().pushMatrix();
-        g.pose().translate(cx, cy);
-        g.pose().scale((float) zoom, (float) zoom);
-        g.pose().translate(-cx, -cy);
+        // Chrome (unscaled screen space).
+        g.fill(0, 0, this.width, 22, COL_PANEL);
+        g.text(this.font, Component.literal("Crafting Tree Inspector").withStyle(ChatFormatting.WHITE), 8, 7, 0xFFFFFFFF);
+        drawZoomLabel(g, cx, cy);
+        drawLegend(g);
 
-        // Clip the graph to the viewport so panned nodes don't overlap the chrome.
+        // Convert screen mouse to world coords for hit testing.
+        double wmx = cx + (mouseX - cx - panX) / zoom;
+        double wmy = cy + (mouseY - cy - panY) / zoom;
+
+        // Clip the graph to the viewport in screen space, before applying the pose transform.
         int top = 24;
         int bottom = this.height - 32;
         g.enableScissor(0, top, this.width, bottom);
+
+        // Pose transform: pan (screen pixels), then zoom around the viewport centre.
+        g.pose().pushMatrix();
+        g.pose().translate((float) panX, (float) panY);
+        g.pose().translate(cx, cy);
+        g.pose().scale((float) zoom, (float) zoom);
+        g.pose().translate(-cx, -cy);
 
         cardHits.clear();
         drawConnectors(g);
@@ -229,17 +245,11 @@ public class CraftingTreeScreen extends Screen {
         for (var entry : itemRects.entrySet()) {
             int item = entry.getKey();
             int[] r = entry.getValue();
-            drawItemNode(g, item, r[0], r[1], r[2], r[3], mouseX, mouseY);
+            drawItemNode(g, item, r[0], r[1], r[2], r[3], wmx, wmy);
         }
 
-        g.disableScissor();
         g.pose().popMatrix();
-
-        // Header / legend (unscaled screen space).
-        g.fill(0, 0, this.width, 22, COL_PANEL);
-        g.text(this.font, Component.literal("Crafting Tree Inspector").withStyle(ChatFormatting.WHITE), 8, 7, 0xFFFFFFFF);
-        drawZoomLabel(g);
-        drawLegend(g);
+        g.disableScissor();
 
         super.extractRenderState(g, mouseX, mouseY, partial);
 
@@ -247,11 +257,17 @@ public class CraftingTreeScreen extends Screen {
         drawHoverTooltip(g, mouseX, mouseY);
     }
 
-    private void drawZoomLabel(GuiGraphicsExtractor g) {
+    private void drawZoomLabel(GuiGraphicsExtractor g, int cx, int cy) {
         String label = String.format("Zoom %d%%", (int) Math.round(zoom * 100));
-        int w = this.font.width(label);
-        g.fill(this.width - w - 10, 3, this.width - 2, 20, COL_PANEL);
-        g.text(this.font, Component.literal(label), this.width - w - 8, 7, 0xFFBBBBBB);
+        int labelW = this.font.width(label);
+        int right = this.width - 8;
+        int btnW = 22, btnH = 18, gap = 6;
+        int resetW = 44;
+        int resetX = right - resetW;
+        int labelX = resetX - gap - labelW;
+        int labelY = 7;
+        g.fill(labelX - 2, 3, labelX + labelW + 2, 20, COL_PANEL);
+        g.text(this.font, Component.literal(label), labelX, labelY, 0xFFBBBBBB);
     }
 
     private void drawLegend(GuiGraphicsExtractor g) {
@@ -260,25 +276,6 @@ public class CraftingTreeScreen extends Screen {
         String legend = "Left-click: ban this recipe here   §7•   §rShift-click: ban everywhere"
                 + "   §7•   §rDrag/scroll: pan   §7•   §rCtrl-scroll / buttons: zoom";
         g.text(this.font, Component.literal(legend), 8, y + 4, 0xFFBBBBBB);
-    }
-
-    // ----- coordinate helpers ---------------------------------------------------------------------
-
-    /** World coordinate -> screen x (zoom + pan, in mouse space). */
-    private int scrX(double wx) {
-        return (int) Math.round(wx * zoom + panX + zoomOffX);
-    }
-
-    private int scrY(double wy) {
-        return (int) Math.round(wy * zoom + panY + zoomOffY);
-    }
-
-    private int scrW(double ww) {
-        return (int) Math.ceil(ww * zoom);
-    }
-
-    private int scrH(double hh) {
-        return (int) Math.ceil(hh * zoom);
     }
 
     // ----- rendering ------------------------------------------------------------------------------
@@ -290,22 +287,22 @@ public class CraftingTreeScreen extends Screen {
             if (card == null) {
                 continue;
             }
-            int startX = (int) Math.round((card[0] + card[2]) + panWorldX);
-            int startY = (int) Math.round((card[1] + card[3] / 2.0) + panWorldY);
+            int startX = card[0] + card[2];
+            int startY = card[1] + card[3] / 2;
             for (int ing : recipe.ingredientItemIndices()) {
                 int[] r = itemRects.get(ing);
                 if (r == null) {
                     continue;
                 }
-                int endX = (int) Math.round(r[0] + panWorldX);
-                int endY = (int) Math.round(r[1] + HEADER_H / 2.0 + panWorldY);
+                int endX = r[0];
+                int endY = r[1] + HEADER_H / 2;
                 int color = recipe.banned() ? COL_BANNED : (recipe.active() ? COL_ACTIVE : COL_CONNECTOR);
                 drawElbow(g, startX, startY, endX, endY, color);
             }
         }
     }
 
-    /** Cards are laid out inside their owning item node; recompute a recipe's card rect (world units). */
+    /** Cards are laid out inside their owning item node (world units). */
     @Nullable
     private int[] cardRect(int recipeIndex) {
         for (var entry : itemRects.entrySet()) {
@@ -328,27 +325,21 @@ public class CraftingTreeScreen extends Screen {
         g.fill(Math.min(midX, x1), y1, Math.max(x0, x1) + 1, y1 + 1, color);
     }
 
-    private boolean drawItemNode(GuiGraphicsExtractor g, int item, int x, int y, int w, int h, int mouseX, int mouseY) {
+    private boolean drawItemNode(GuiGraphicsExtractor g, int item, int x, int y, int w, int h,
+                                 double worldMouseX, double worldMouseY) {
         var node = tree.items().get(item);
-        // World -> screen drawing coords: pan expressed in world units, then the pose scales by zoom.
-        int dx = (int) Math.round(x + panWorldX);
-        int dy = (int) Math.round(y + panWorldY);
-        g.fill(dx, dy, dx + w, dy + h, COL_NODE_BG);
-        g.outline(dx, dy, w, h, COL_BORDER);
+        g.fill(x, y, x + w, y + h, COL_NODE_BG);
+        g.outline(x, y, w, h, COL_BORDER);
 
         // Header: item icon + name, truncated to fit the node width.
-        g.item(node.icon(), dx + NODE_PAD, dy + 2);
+        g.item(node.icon(), x + NODE_PAD, y + 2);
         String name = node.icon().getHoverName().getString();
-        int maxNameW = w - NODE_PAD * 2 - 20; // 20 = icon width (16) + gap (4), in world units
+        int maxNameW = w - NODE_PAD * 2 - 20; // 20 = icon width (16) + gap (4)
         name = fitWidth(this.font, name, Math.max(0, maxNameW));
-        g.text(this.font, Component.literal(name), dx + NODE_PAD + 20, dy + 6, 0xFFE0E0E0);
+        g.text(this.font, Component.literal(name), x + NODE_PAD + 20, y + 6, 0xFFE0E0E0);
 
-        int screenX = scrX(x);
-        int screenY = scrY(y);
-        int screenW = scrW(w);
-        int headerH = scrH(HEADER_H);
-        boolean hoveredHeader = mouseX >= screenX && mouseX < screenX + screenW
-                && mouseY >= screenY && mouseY < screenY + headerH;
+        boolean hoveredHeader = worldMouseX >= x && worldMouseX < x + w
+                && worldMouseY >= y && worldMouseY < y + HEADER_H;
 
         // Recipe cards.
         var recipeIndices = node.recipeIndices();
@@ -356,10 +347,8 @@ public class CraftingTreeScreen extends Screen {
             int recipeIdx = recipeIndices.get(slot);
             int cx = x + NODE_PAD;
             int cy = y + HEADER_H + NODE_PAD + slot * CARD_H;
-            drawCard(g, recipeIdx, cx, cy, CARD_W, CARD_H - 2, mouseX, mouseY);
-            int cardScreenX = scrX(cx);
-            int cardScreenY = scrY(cy);
-            cardHits.add(new CardHit(recipeIdx, cardScreenX, cardScreenY, scrW(CARD_W), scrH(CARD_H - 2)));
+            drawCard(g, recipeIdx, cx, cy, CARD_W, CARD_H - 2, worldMouseX, worldMouseY);
+            cardHits.add(new CardHit(recipeIdx, cx, cy, CARD_W, CARD_H - 2));
         }
         return hoveredHeader;
     }
@@ -379,18 +368,17 @@ public class CraftingTreeScreen extends Screen {
         return sb.append("…").toString();
     }
 
-    private void drawCard(GuiGraphicsExtractor g, int recipeIdx, int x, int y, int w, int h, int mouseX, int mouseY) {
+    private void drawCard(GuiGraphicsExtractor g, int recipeIdx, int x, int y, int w, int h,
+                          double worldMouseX, double worldMouseY) {
         var recipe = tree.recipes().get(recipeIdx);
-        int dx = (int) Math.round(x + panWorldX);
-        int dy = (int) Math.round(y + panWorldY);
-        boolean hovered = mouseX >= scrX(x) && mouseX < scrX(x) + scrW(w)
-                && mouseY >= scrY(y) && mouseY < scrY(y) + scrH(h);
+        boolean hovered = worldMouseX >= x && worldMouseX < x + w
+                && worldMouseY >= y && worldMouseY < y + h;
 
-        g.fill(dx, dy, dx + w, dy + h, COL_CARD_BG);
+        g.fill(x, y, x + w, y + h, COL_CARD_BG);
 
         // 3x3 grid.
-        int gx = dx + 3;
-        int gy = dy + (h - GRID) / 2;
+        int gx = x + 3;
+        int gy = y + (h - GRID) / 2;
         g.fill(gx - 1, gy - 1, gx + GRID + 1, gy + GRID + 1, COL_SLOT_BG);
         for (int i = 0; i < 9; i++) {
             ItemStack cell = i < recipe.grid().size() ? recipe.grid().get(i) : ItemStack.EMPTY;
@@ -403,7 +391,7 @@ public class CraftingTreeScreen extends Screen {
 
         // Arrow + output.
         int arrowX = gx + GRID + 3;
-        int outY = dy + (h - 16) / 2;
+        int outY = y + (h - 16) / 2;
         g.text(this.font, Component.literal("→"), arrowX, outY + 4, 0xFFAAAAAA);
         int outX = arrowX + 9;
         g.item(recipe.output(), outX, outY);
@@ -413,17 +401,17 @@ public class CraftingTreeScreen extends Screen {
 
         // State overlays and borders.
         if (recipe.banned()) {
-            g.fill(dx, dy, dx + w, dy + h, COL_BANNED_FILL);
-            g.outline(dx, dy, w, h, COL_BANNED);
+            g.fill(x, y, x + w, y + h, COL_BANNED_FILL);
+            g.outline(x, y, w, h, COL_BANNED);
         } else if (recipe.active()) {
-            g.outline(dx, dy, w, h, COL_ACTIVE);
+            g.outline(x, y, w, h, COL_ACTIVE);
         } else if (recipe.root()) {
-            g.outline(dx, dy, w, h, COL_ROOT);
+            g.outline(x, y, w, h, COL_ROOT);
         } else {
-            g.outline(dx, dy, w, h, COL_BORDER);
+            g.outline(x, y, w, h, COL_BORDER);
         }
         if (hovered && isBannable(recipe)) {
-            g.outline(dx - 1, dy - 1, w + 2, h + 2, 0xFFFFFFFF);
+            g.outline(x - 1, y - 1, w + 2, h + 2, 0xFFFFFFFF);
         }
     }
 
@@ -439,9 +427,11 @@ public class CraftingTreeScreen extends Screen {
     }
 
     private void drawHoverTooltip(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        double wmx = this.width / 2.0 + (mouseX - this.width / 2.0 - panX) / zoom;
+        double wmy = this.height / 2.0 + (mouseY - this.height / 2.0 - panY) / zoom;
         for (int i = cardHits.size() - 1; i >= 0; i--) {
             CardHit hit = cardHits.get(i);
-            if (mouseX >= hit.x() && mouseX < hit.x() + hit.w() && mouseY >= hit.y() && mouseY < hit.y() + hit.h()) {
+            if (wmx >= hit.x() && wmx < hit.x() + hit.w() && wmy >= hit.y() && wmy < hit.y() + hit.h()) {
                 var recipe = tree.recipes().get(hit.recipeIndex());
                 List<Component> lines = new ArrayList<>();
                 if (recipe.root()) {
@@ -480,10 +470,11 @@ public class CraftingTreeScreen extends Screen {
             return true;
         }
         if (event.button() == 0) {
+            double wmx = this.width / 2.0 + (event.x() - this.width / 2.0 - panX) / zoom;
+            double wmy = this.height / 2.0 + (event.y() - this.height / 2.0 - panY) / zoom;
             for (int i = cardHits.size() - 1; i >= 0; i--) {
                 CardHit hit = cardHits.get(i);
-                if (event.x() >= hit.x() && event.x() < hit.x() + hit.w()
-                        && event.y() >= hit.y() && event.y() < hit.y() + hit.h()) {
+                if (wmx >= hit.x() && wmx < hit.x() + hit.w() && wmy >= hit.y() && wmy < hit.y() + hit.h()) {
                     var recipe = tree.recipes().get(hit.recipeIndex());
                     if (isBannable(recipe)) {
                         toggleBan(recipe, event.hasShiftDown());
@@ -515,7 +506,7 @@ public class CraftingTreeScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (hasControlDown()) {
-            zoom(-scrollY * ZOOM_STEP);
+            zoomAt(scrollY * ZOOM_STEP_SCROLL, (int) mouseX, (int) mouseY);
             return true;
         }
         if (scrollX != 0) {
