@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.1.2.jar` from Releases.
+1. Download `otter-patterns-1.1.3.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
 4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.
@@ -95,8 +95,4 @@ On Windows, use `gradlew.bat build`. The installable JAR is written to `build/li
 
 Original mod by **Lumengrid (Lumengrid89)**. I maintain this independent fork as **Cupears**; my changes are described above and in [CHANGELOG.md](CHANGELOG.md). This fork is not an official upstream release. My individual contributions remain available as separate upstream pull requests.
 
-## Licensing status
-
-I found inconsistent upstream license declarations: the author's [CurseForge license page](https://www.curseforge.com/minecraft/mc-mods/recursive-ae2-pattern-provider/license) publishes **CC BY 4.0**, and [Modrinth's project metadata](https://api.modrinth.com/v2/project/recursiveae2patternprovider) agrees, while the [26.1 source metadata](https://github.com/Lumengrid/RecursiveAE2PatternProvider/blob/26.1/gradle.properties) says **All Rights Reserved**. I have preserved that source declaration and have not replaced it with a different license. The license applicable to the 26.1 source and modified builds needs clarification from Lumengrid.
-
-[TEMPLATE_LICENSE.txt](TEMPLATE_LICENSE.txt) contains the **NeoForged project's MIT license for MDK template files only**. It does not license the whole mod. I retain that notice unchanged. See [NOTICE.md](NOTICE.md) for attribution and the license references.
+I keep this fork under [Creative Commons Attribution 4.0 International (CC BY 4.0)](LICENSE.txt), matching the author's [published mod license](https://www.curseforge.com/minecraft/mc-mods/recursive-ae2-pattern-provider/license). See [NOTICE.md](NOTICE.md) for attribution. The NeoForge MDK template retains its separate [MIT license](TEMPLATE_LICENSE.txt).

@@ -127,6 +127,12 @@ dependencies {
     compileOnly "curse.maven:ae2-wcwt-1546802:8970875"
 }
 
+tasks.named('jar', Jar) {
+    from(project.files('LICENSE.txt', 'NOTICE.md', 'TEMPLATE_LICENSE.txt')) {
+        into 'META-INF'
+    }
+}
+
 tasks.named('test', Test) {
     useJUnitPlatform()
 }

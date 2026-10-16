@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3
+
+I aligned the fork's metadata and documentation with the author's published CC BY 4.0 license. I included the full license, attribution, and unchanged NeoForge template notice in the JAR. Crafting behavior is unchanged from 1.1.2.
+
 ## 1.1.2
 
 - I made the recursive toggle respect my off choice when I re-encode an existing recursive pattern.
