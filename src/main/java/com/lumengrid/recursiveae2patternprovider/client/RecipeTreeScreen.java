@@ -24,7 +24,8 @@ public final class RecipeTreeScreen extends Screen {
     private double panX = 16, panY = 12, zoom = 1;
     private boolean dragging, waiting, closed, invalidSession;
     private Component status = Component.empty();
-    private Button routeButton, saveButton;
+    private Button routeButton, saveButton, cancelButton;
+    private int savingTicks;
     private record Box(int id, int x, int y) {}
 
     private RecipeTreeScreen(RecipeTreePackets.Open snapshot) {
@@ -66,12 +67,13 @@ public final class RecipeTreeScreen extends Screen {
                 .bounds(16 + w * 2, height - 27, w, 20).build());
         saveButton = addRenderableWidget(Button.builder(tr("save"), b -> save())
                 .bounds(20 + w * 3, height - 27, w, 20).build());
-        addRenderableWidget(Button.builder(tr("cancel"), b -> onClose())
+        cancelButton = addRenderableWidget(Button.builder(tr("cancel"), b -> onClose())
                 .bounds(24 + w * 4, height - 27, w, 20).build());
         saveButton.active = !waiting && !invalidSession;
         updateButtons();
     }
     private void updateButtons() {
+        cancelButton.active = !waiting;
         boolean recipe = selected >= 0 && snapshot.tree().nodes().get(selected).recipe();
         routeButton.active = recipe && !waiting && !invalidSession;
         routeButton.setMessage(tr(recipe && excluded.contains(snapshot.tree().nodes().get(selected).recipeId()) ? "enable" : "disable"));
@@ -88,14 +90,24 @@ public final class RecipeTreeScreen extends Screen {
     }
     private void save() {
         if (waiting || invalidSession) return;
-        waiting = true; saveButton.active = false; updateButtons(); status = tr("saving");
+        waiting = true; savingTicks = 0; saveButton.active = false; updateButtons(); status = tr("saving");
         ClientPacketDistributor.sendToServer(new RecipeTreePackets.Save(snapshot.session(), true, Set.copyOf(excluded)));
     }
     @Override public void onClose() {
+        if (waiting) return;
         if (!closed) ClientPacketDistributor.sendToServer(new RecipeTreePackets.Save(snapshot.session(), false, Set.of()));
         closed = true; super.onClose();
     }
     @Override public boolean isPauseScreen() { return false; }
+    @Override public void tick() {
+        super.tick();
+        if (waiting && ++savingTicks >= 20 * 30) {
+            waiting = false;
+            invalidSession = true;
+            status = tr("save_timeout");
+            updateButtons();
+        }
+    }
 
     // Preorder rows keep siblings separated; branches expand without overlapping cards.
     private int layout(int id, int depth, int row) {

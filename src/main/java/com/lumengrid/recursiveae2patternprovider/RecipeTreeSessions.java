@@ -32,9 +32,9 @@ public final class RecipeTreeSessions {
         if (previous != null && now >= previous && now - previous < 20) return;
         LAST_OPEN.put(player, now);
         var stack = player.getItemInHand(event.getHand());
-        var details = PatternDetailsHelper.decodePattern(stack, player.level());
-        if (details == null) return;
         try {
+            var details = PatternDetailsHelper.decodePattern(stack, player.level());
+            if (details == null) return;
             var tree = RecipeTree.build(details, player.level());
             var exclusions = PatternRecipeRules.read(stack);
             var session = new Session(UUID.randomUUID(), event.getHand(), player.getInventory().getSelectedSlot(),
@@ -54,7 +54,11 @@ public final class RecipeTreeSessions {
 
     public static void save(ServerPlayer player, RecipeTreePackets.Save request) {
         var session = SESSIONS.get(player);
-        if (session == null || !session.id().equals(request.session())) return;
+        if (session == null || !session.id().equals(request.session())) {
+            if (request.apply()) PacketDistributor.sendToPlayer(player,
+                    new RecipeTreePackets.Result(request.session(), false, "stale"));
+            return;
+        }
         SESSIONS.remove(player);
         if (!request.apply()) return;
         boolean sameSlot = session.hand() == InteractionHand.OFF_HAND || player.getInventory().getSelectedSlot() == session.slot();

@@ -1,1 +1,1 @@
-Fixed the Pattern Encoding Terminal failing to open with TransparentAE2 due to a conflicting GUI sync ID.
+Fixed stuck editor saves when a session expires, prevented cancelling a pending save, and added recovery when no save confirmation arrives. Pattern decoding errors are now handled during editor opening.

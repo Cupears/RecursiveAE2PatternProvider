@@ -55,6 +55,7 @@
   "gui.recursiveae2patternprovider.tree.variants": "Example ingredients only; accepted wood and other variants may differ.",
   "gui.recursiveae2patternprovider.tree.rule_limit": "At most 128 recipe exclusions can be saved on one pattern.",
   "gui.recursiveae2patternprovider.tree.saving": "Saving recipe choices...",
+  "gui.recursiveae2patternprovider.tree.save_timeout": "No save confirmation received. Reopen the editor to check the saved choices.",
   "gui.recursiveae2patternprovider.tree.saved": "Recipe choices saved. Reinsert the pattern in its provider and request a new craft.",
   "gui.recursiveae2patternprovider.tree.stale": "Pattern changed or session expired. Close and reopen the editor.",
   "gui.recursiveae2patternprovider.tree.invalid": "These recipe choices are invalid. Close and reopen the editor.",

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0-beta.3
+
+- Expired or missing editor sessions return an error instead of leaving Save waiting indefinitely.
+- Cancel and Escape wait for an in-progress save to finish, with a timeout if no confirmation arrives.
+- Pattern decoding errors are handled without breaking the editor's right-click request.
+- Added an isolated client smoke run covering terminal compatibility, editor navigation, saving, cancelling and stale sessions.
+
 ## 1.2.0-beta.2
 
 Fixed the recursive encoding terminal failing to open when TransparentAE2 is installed because both mods registered GUI sync ID 30000. Moved recursive mode to a separate shared ID and added a parent-menu synchronization regression check.
