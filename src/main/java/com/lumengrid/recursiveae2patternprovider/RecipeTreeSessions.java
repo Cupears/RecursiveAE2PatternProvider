@@ -16,7 +16,8 @@ import java.util.*;
 @EventBusSubscriber(modid = RecursiveAE2PatternProvider.MODID)
 public final class RecipeTreeSessions {
     private record Session(UUID id, InteractionHand hand, int slot, ItemStack original,
-                           Set<String> shown, Set<String> excluded, long opened) {}
+                           Set<String> shown, Set<String> excluded, long opened, List<RecipeTree.Node> nodes,
+                           Map<Integer, Integer> offsets, Set<Integer> complete) {}
     private static final Map<ServerPlayer, Session> SESSIONS = new WeakHashMap<>();
     private static final Map<ServerPlayer, Long> LAST_OPEN = new WeakHashMap<>();
     private RecipeTreeSessions() {}
@@ -38,7 +39,7 @@ public final class RecipeTreeSessions {
             var tree = RecipeTree.build(details, player.level());
             var exclusions = PatternRecipeRules.read(stack);
             var session = new Session(UUID.randomUUID(), event.getHand(), player.getInventory().getSelectedSlot(),
-                    stack.copy(), tree.recipeIds(), exclusions, now);
+                    stack.copy(), new HashSet<>(), exclusions, now, new ArrayList<>(tree.nodes()), new HashMap<>(), new HashSet<>());
             SESSIONS.put(player, session);
             PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Open(session.id(), tree, exclusions));
         } catch (RuntimeException e) {
@@ -50,6 +51,35 @@ public final class RecipeTreeSessions {
     static boolean matchesPattern(ItemStack held, ItemStack original, boolean sameSlot, long age) {
         return sameSlot && age >= 0 && age <= 20 * 60 * 15 && PatternUtil.isRecursive(held)
                 && ItemStack.matches(held, original);
+    }
+
+    public static void expand(ServerPlayer player, RecipeTreePackets.Expand request) {
+        var session = SESSIONS.get(player);
+        if (session == null || !session.id().equals(request.session())) {
+            PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Result(request.session(), false, "stale"));
+            return;
+        }
+        boolean sameSlot = session.hand() == InteractionHand.OFF_HAND || player.getInventory().getSelectedSlot() == session.slot();
+        if (!matchesPattern(player.getItemInHand(session.hand()), session.original(), sameSlot,
+                player.level().getGameTime() - session.opened())) {
+            PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Result(request.session(), false, "stale"));
+            return;
+        }
+        int parent = request.parent();
+        if (parent <= 0 || parent >= session.nodes().size() || session.nodes().get(parent).recipe()
+                || session.complete().contains(parent) || request.offset() != session.offsets().getOrDefault(parent, 0)) return;
+        try {
+            int start = session.nodes().size();
+            var page = RecipeTree.expand(session.nodes(), parent, request.offset(), player.level());
+            session.nodes().addAll(page.nodes());
+            for (var node : page.nodes()) if (node.recipe()) session.shown().add(node.recipeId());
+            session.offsets().put(parent, page.nextOffset());
+            if (page.done()) session.complete().add(parent);
+            PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Branch(session.id(), parent, start, page));
+        } catch (RuntimeException e) {
+            RecursiveAE2PatternProvider.LOGGER.warn("Could not expand recipe branch", e);
+            PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Result(session.id(), false, "error"));
+        }
     }
 
     public static void save(ServerPlayer player, RecipeTreePackets.Save request) {

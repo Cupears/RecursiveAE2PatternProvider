@@ -63,7 +63,7 @@ Drag the empty canvas to pan, scroll to move, and use `+` / `-` to zoom. **Reset
 
 I save up to 128 exact recipe exclusions on the encoded pattern. They survive copying, saving, and re-encoding. This filters dependencies generated for that pattern; AE2's shared network can still use manually supplied patterns or routes offered by other recursive patterns/providers.
 
-The tree previews crafting alternatives, rather than the selected AE2 craft or ME inventory stock. Recipe grids show example ingredients; accepted wood and other variants may differ. A bounded preview shows up to 320 nodes, 32 recipes per item, and six dependency levels, with a notice when it is truncated. Existing exclusions outside the preview are preserved. If all shown routes are disabled, the item can still come from storage or a supplied pattern.
+The compact tree has a transparent background and loads recipe alternatives as I expand branches. There is no total node, recipe-count or depth cutoff; circular paths stop at the repeated item. Recipe grids show example ingredients rather than the selected AE2 craft or ME inventory stock, so accepted wood and other variants may differ. Existing exclusions on unopened branches are preserved. If all routes are disabled, the item can still come from storage or a supplied pattern.
 
 ## Configuration
 

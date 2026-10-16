@@ -80,6 +80,61 @@ public final class RecipeTreePackets {
             ctx.enqueueWork(() -> com.lumengrid.recursiveae2patternprovider.client.RecipeTreeScreen.open(packet));
         }
     }
+    public record Expand(UUID session, int parent, int offset) implements CustomPacketPayload {
+        public static final Type<Expand> TYPE = RecipeTreePackets.type("recipe_tree_expand");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Expand> CODEC = new StreamCodec<>() {
+            public Expand decode(RegistryFriendlyByteBuf buf) { return new Expand(buf.readUUID(), bounded(buf.readVarInt(), Integer.MAX_VALUE), bounded(buf.readVarInt(), Integer.MAX_VALUE)); }
+            public void encode(RegistryFriendlyByteBuf buf, Expand packet) { buf.writeUUID(packet.session()); buf.writeVarInt(packet.parent()); buf.writeVarInt(packet.offset()); }
+        };
+        public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        public static void handle(Expand packet, IPayloadContext ctx) {
+            ctx.enqueueWork(() -> { if (ctx.player() instanceof ServerPlayer player) RecipeTreeSessions.expand(player, packet); });
+        }
+    }
+    public record Branch(UUID session, int parent, int start, RecipeTree.Page page) implements CustomPacketPayload {
+        public static final Type<Branch> TYPE = RecipeTreePackets.type("recipe_tree_branch");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Branch> CODEC = new StreamCodec<>() {
+            public Branch decode(RegistryFriendlyByteBuf buf) {
+                UUID session = buf.readUUID();
+                int parent = bounded(buf.readVarInt(), Integer.MAX_VALUE);
+                int start = bounded(buf.readVarInt(), Integer.MAX_VALUE);
+                int offset = bounded(buf.readVarInt(), Integer.MAX_VALUE);
+                boolean done = buf.readBoolean(); int note = bounded(buf.readVarInt(), 2);
+                int count = bounded(buf.readVarInt(), RecipeTree.MAX_NODES);
+                var nodes = new ArrayList<RecipeTree.Node>();
+                if (parent < 1 || start <= parent || start > Integer.MAX_VALUE - count) throw new IllegalArgumentException("Invalid branch range");
+                for (int i = 0; i < count; i++) {
+                    int nodeParent = buf.readVarInt();
+                    if (nodeParent != parent && (nodeParent < start || nodeParent >= start + i)) throw new IllegalArgumentException("Invalid branch parent");
+                    boolean recipe = buf.readBoolean(); var item = ItemStack.OPTIONAL_STREAM_CODEC.decode(buf);
+                    String id = buf.readUtf(PatternRecipeRules.MAX_ID_LENGTH);
+                    if (recipe && !PatternRecipeRules.valid(id)) throw new IllegalArgumentException("Invalid recipe ID");
+                    int nodeNote = bounded(buf.readVarInt(), 2);
+                    var grid = new ArrayList<ItemStack>();
+                    if (recipe) for (int slot = 0; slot < 9; slot++) grid.add(ItemStack.OPTIONAL_STREAM_CODEC.decode(buf));
+                    nodes.add(new RecipeTree.Node(nodeParent, recipe, item, id, grid, nodeNote));
+                }
+                return new Branch(session, parent, start, new RecipeTree.Page(List.copyOf(nodes), offset, done, note));
+            }
+            public void encode(RegistryFriendlyByteBuf buf, Branch packet) {
+                buf.writeUUID(packet.session()); buf.writeVarInt(packet.parent()); buf.writeVarInt(packet.start());
+                buf.writeVarInt(packet.page().nextOffset()); buf.writeBoolean(packet.page().done()); buf.writeVarInt(packet.page().note());
+                buf.writeVarInt(bounded(packet.page().nodes().size(), RecipeTree.MAX_NODES));
+                for (var node : packet.page().nodes()) {
+                    buf.writeVarInt(node.parent()); buf.writeBoolean(node.recipe());
+                    ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, node.item()); buf.writeUtf(node.recipeId(), PatternRecipeRules.MAX_ID_LENGTH); buf.writeVarInt(node.note());
+                    if (node.recipe()) {
+                        if (node.grid().size() != 9) throw new IllegalArgumentException("Invalid recipe grid");
+                        for (var item : node.grid()) ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, item);
+                    }
+                }
+            }
+        };
+        public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        public static void handle(Branch packet, IPayloadContext ctx) {
+            ctx.enqueueWork(() -> com.lumengrid.recursiveae2patternprovider.client.RecipeTreeScreen.branch(packet));
+        }
+    }
     public record Save(UUID session, boolean apply, Set<String> excluded) implements CustomPacketPayload {
         public static final Type<Save> TYPE = RecipeTreePackets.type("recipe_tree_save");
         public static final StreamCodec<RegistryFriendlyByteBuf, Save> CODEC = new StreamCodec<>() {

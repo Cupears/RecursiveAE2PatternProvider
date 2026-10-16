@@ -15,8 +15,10 @@ The run exercises:
 
 - Pattern Encoding, Crafting, Pattern Access and ME terminals, including recursive-mode synchronization.
 - Opening a held recursive pattern through its actual right-click packet.
+- Loading 200 additional recipe alternatives across multiple server responses, exceeding 320 total nodes.
 - Expanding branches, panning, zooming, resetting the view and toggling recipe routes.
 - Saving rules to the held pattern, reopening, cancelling changes and resetting saved rules.
+- Checking the short save confirmation.
 - Blocking Cancel during a pending save, rejecting a missing session and rejecting a changed held item.
 - The missing-confirmation timeout boundary (advanced directly rather than waiting 30 seconds).
 

@@ -1,1 +1,1 @@
-Fixed stuck editor saves when a session expires, prevented cancelling a pending save, and added recovery when no save confirmation arrives. Pattern decoding errors are now handled during editor opening.
+Shortened the save confirmation. Made the editor background transparent, reduced card sizes and tightened branch spacing. Removed the preview's total node, recipe-count and depth cutoffs by loading branches on demand.

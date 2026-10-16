@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0-beta.4
+
+- Shortened the save confirmation to "Recipe choices saved."
+- Added a transparent editor background, smaller cards and closer branch spacing.
+- Replaced the tree's node, recipe-count and depth cutoffs with branches that load on demand. All static alternatives remain browsable; cycles stop at repeated items.
+- Added checks for large recipe lists, deep branches and pattern-specific furnace exclusions.
+
 ## 1.2.0-beta.3
 
 - Expired or missing editor sessions return an error instead of leaving Save waiting indefinitely.

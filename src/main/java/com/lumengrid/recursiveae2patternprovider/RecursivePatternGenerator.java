@@ -166,6 +166,14 @@ public final class RecursivePatternGenerator {
         return cached == null ? Set.of() : cached.furnaceOutputs();
     }
 
+    static List<RecipeHolder<CraftingRecipe>> editorRecipes(Level level, Item target) {
+        var settings = Settings.fromConfig();
+        return getRecipeIndex(level).getOrDefault(target, List.of()).stream()
+                .filter(r -> !settings.isBlacklisted(r.id().identifier()) && (!settings.skipSelfReferential()
+                        || !usesItem(r.value(), target)))
+                .sorted(java.util.Comparator.comparing(r -> r.id().identifier().toString())).toList();
+    }
+
     static RecipeSelection editorSelection(Level level) {
         var settings = Settings.fromConfig();
         return new RecipeSelection(getRecipeIndex(level), getFurnaceOutputs(level.getServer().getRecipeManager()),

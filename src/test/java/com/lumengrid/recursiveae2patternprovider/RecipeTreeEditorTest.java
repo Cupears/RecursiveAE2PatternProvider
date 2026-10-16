@@ -103,7 +103,7 @@ class RecipeTreeEditorTest {
     @Test void previewShowsDisabledRecipesSoTheyCanBeEnabledAgain(MinecraftServer server) throws Exception {
         withRecipes(server, fixtures(), () -> {
             var root = details(pattern(Items.REDSTONE, Items.CLOCK, Set.of("test:hats")));
-            var tree = RecipeTree.build(root, recipeLevel(server));
+            var tree = expandedTree(root, recipeLevel(server));
             assertEquals(Set.of("test:hats", "test:blocks"), tree.recipeIds());
             assertTrue(tree.nodes().size() <= RecipeTree.MAX_NODES);
             for (int i = 1; i < tree.nodes().size(); i++) assertTrue(tree.nodes().get(i).parent() < i);
@@ -113,7 +113,7 @@ class RecipeTreeEditorTest {
     @Test void treeAndSavePacketsRoundTrip(MinecraftServer server) throws Exception {
         withRecipes(server, fixtures(), () -> {
             var root = details(pattern(Items.REDSTONE, Items.CLOCK, Set.of("test:hats")));
-            var tree = RecipeTree.build(root, recipeLevel(server));
+            var tree = expandedTree(root, recipeLevel(server));
             var expected = new RecipeTreePackets.Open(UUID.randomUUID(), tree, Set.of("test:hats"));
             var buf = buffer(server);
             try {
@@ -136,27 +136,76 @@ class RecipeTreeEditorTest {
             } finally { buf.release(); }
         });
     }
-    @Test void previewBoundsLargeAlternativeSets(MinecraftServer server) throws Exception {
+    @Test void allAlternativesAreReachableAcrossPagesWithoutATreeCap(MinecraftServer server) throws Exception {
         var recipes = new ArrayList<RecipeHolder<?>>();
-        for (int i = 0; i < 80; i++) recipes.add(recipe("test:alternative_" + i, Items.DIRT, Items.REDSTONE, 1));
+        for (int i = 0; i < 200; i++) recipes.add(recipe("test:alternative_" + i, Items.DIRT, Items.REDSTONE, 1));
         withRecipes(server, recipes, () -> {
-            var tree = RecipeTree.build(details(pattern(Items.REDSTONE, Items.CLOCK, Set.of())), recipeLevel(server));
-            assertTrue(tree.truncated());
-            assertEquals(RecipeTree.MAX_RECIPES, tree.recipeIds().size());
-            assertTrue(tree.nodes().size() <= RecipeTree.MAX_NODES);
-            assertTrue(tree.nodes().stream().anyMatch(n -> n.note() == 4));
+            var initial = RecipeTree.build(details(pattern(Items.REDSTONE, Items.CLOCK, Set.of())), recipeLevel(server));
+            assertEquals(2, initial.nodes().size());
+            var nodes = new ArrayList<>(initial.nodes());
+            int offset = 0; boolean done;
+            do {
+                var page = RecipeTree.expand(nodes, 1, offset, recipeLevel(server));
+                assertTrue(page.nodes().size() <= RecipeTree.MAX_NODES);
+                var packet = new RecipeTreePackets.Branch(UUID.randomUUID(), 1, nodes.size(), page);
+                var buf = buffer(server);
+                try {
+                    RecipeTreePackets.Branch.CODEC.encode(buf, packet);
+                    var decoded = RecipeTreePackets.Branch.CODEC.decode(buf);
+                    assertEquals(page.nextOffset(), decoded.page().nextOffset());
+                    assertEquals(page.done(), decoded.page().done());
+                    assertEquals(page.nodes().size(), decoded.page().nodes().size());
+                    for (int i = 0; i < page.nodes().size(); i++) {
+                        assertEquals(page.nodes().get(i).parent(), decoded.page().nodes().get(i).parent());
+                        assertTrue(ItemStack.listMatches(page.nodes().get(i).grid(), decoded.page().nodes().get(i).grid()));
+                    }
+                    assertEquals(0, buf.readableBytes());
+                } finally { buf.release(); }
+                nodes.addAll(page.nodes()); offset = page.nextOffset(); done = page.done();
+            } while (!done);
+            assertEquals(200, new RecipeTree(nodes, false).recipeIds().size());
+            assertTrue(nodes.size() > RecipeTree.MAX_NODES);
         });
     }
-    @Test void previewStopsAtDepthLimit(MinecraftServer server) throws Exception {
+    @Test void previewHasNoDepthCutoffAndStopsCycles(MinecraftServer server) throws Exception {
         Item[] chain = {Items.REDSTONE, Items.DIRT, Items.STONE, Items.COBBLESTONE, Items.GRAVEL,
                 Items.SAND, Items.CLAY, Items.BRICK, Items.IRON_INGOT};
         var recipes = new ArrayList<RecipeHolder<?>>();
         for (int i = 0; i < chain.length - 1; i++) recipes.add(recipe("test:step_" + i, chain[i + 1], chain[i], 1));
+        recipes.add(recipe("test:back", Items.REDSTONE, Items.IRON_INGOT, 1));
         withRecipes(server, recipes, () -> {
-            var tree = RecipeTree.build(details(pattern(Items.REDSTONE, Items.CLOCK, Set.of())), recipeLevel(server));
-            assertTrue(tree.truncated());
-            assertTrue(tree.nodes().stream().anyMatch(n -> n.note() == 3));
+            var tree = expandedTree(details(pattern(Items.REDSTONE, Items.CLOCK, Set.of())), recipeLevel(server));
+            assertFalse(tree.truncated());
+            assertEquals(9, tree.recipeIds().size());
+            assertTrue(tree.nodes().stream().anyMatch(n -> n.note() == 2));
+            assertTrue(tree.nodes().stream().noneMatch(n -> n.note() == 3));
         });
+    }
+    @Test void furnaceBanRemainsLocalAndAnotherPatternCanUseEssence(MinecraftServer server) throws Exception {
+        withRecipes(server, List.of(recipe("test:stone_essence", Items.SLIME_BALL, Items.COBBLESTONE, 8),
+                recipe("test:stone", Items.STONE, Items.COBBLESTONE, 1)), () -> {
+            var furnace = details(pattern(Items.COBBLESTONE, Items.FURNACE, Set.of("test:stone_essence")));
+            var other = details(pattern(Items.COBBLESTONE, Items.DISPENSER, Set.of()));
+            var blocked = RecursivePatternGenerator.generate(List.of(furnace), recipeLevel(server), -1);
+            var allowed = RecursivePatternGenerator.generate(List.of(other), recipeLevel(server), -1);
+            assertFalse(consumes(blocked, Items.SLIME_BALL));
+            assertTrue(consumes(blocked, Items.STONE));
+            assertTrue(consumes(allowed, Items.SLIME_BALL));
+            var combined = RecursivePatternGenerator.generate(List.of(furnace, other), recipeLevel(server), -1);
+            assertTrue(consumes(combined, Items.SLIME_BALL)); // Shared AE2 recipe pool; no global ban.
+            assertEquals(Set.of("test:stone_essence"), PatternRecipeRules.read(furnace.getDefinition().toStack()));
+            assertTrue(PatternRecipeRules.read(other.getDefinition().toStack()).isEmpty());
+        });
+    }
+    private static RecipeTree expandedTree(IPatternDetails root, net.minecraft.world.level.Level level) {
+        var initial = RecipeTree.build(root, level); var nodes = new ArrayList<>(initial.nodes());
+        for (int id = 1; id < nodes.size(); id++) {
+            if (nodes.get(id).recipe() || nodes.get(id).note() == 2) continue;
+            int offset = 0; boolean done;
+            do { var page = RecipeTree.expand(nodes, id, offset, level); nodes.addAll(page.nodes()); offset = page.nextOffset(); done = page.done(); }
+            while (!done);
+        }
+        return new RecipeTree(List.copyOf(nodes), false);
     }
     @Test void exclusionsSurviveItemSerialization(MinecraftServer server) {
         var original = pattern(Items.REDSTONE, Items.CLOCK, Set.of("test:hats", "test:blocks"));
