@@ -20,7 +20,7 @@ public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRec
 
 
     @Unique
-    @GuiSync(30000)
+    @GuiSync(com.lumengrid.recursiveae2patternprovider.menu.RecursiveMenuSync.RECURSIVE_MODE)
     public boolean recursiveModeActive = Config.ENABLE.get() && Config.DEFAULT_RECURSIVE_MODE.get();
 
     @Override

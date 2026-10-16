@@ -1,1 +1,1 @@
-Added an orange recipe-tree editor with expandable dependencies, per-pattern recipe exclusions, Save/Cancel, reset controls, and pan/zoom.
+Fixed the Pattern Encoding Terminal failing to open with TransparentAE2 due to a conflicting GUI sync ID.

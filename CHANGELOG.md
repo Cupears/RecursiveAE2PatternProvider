@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0-beta.2
+
+Fixed the recursive encoding terminal failing to open when TransparentAE2 is installed because both mods registered GUI sync ID 30000. Moved recursive mode to a separate shared ID and added a parent-menu synchronization regression check.
+
 ## 1.2.0-beta.1
 
 I added an orange recipe-tree editor opened by right-clicking a held recursive pattern in air. I can disable or re-enable exact generated recipe routes, save those exclusions on the pattern, and inspect nested example recipes. I added bounded server-authored previews, save/cancel, pan/zoom, reset controls, and checks that the held pattern has not changed before saving.
