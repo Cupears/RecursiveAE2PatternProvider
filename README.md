@@ -1,132 +1,77 @@
-Recursive AE2 Pattern Provider
+![Otter Patterns — recursive crafting for AE2](docs/otter-patterns-banner.svg)
 
+# Otter Patterns
 
-🔄 Overview
+**Recursive AE2 crafting, with fewer patterns to manage.**
 
+I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://github.com/Lumengrid/RecursiveAE2PatternProvider). I brought my fixes together on `main`, so there is one complete version to download and build.
 
-**Recursive AE2 Pattern Provider** revolutionizes Applied Energistics 2 automation by automatically generating dependency patterns for complex recipes. Say goodbye to tedious manual pattern creation and hello to effortless multi-tier crafting automation!
+[Download the JAR](https://github.com/Cupears/RecursiveAE2PatternProvider/releases/latest) · [Report an issue](https://github.com/Cupears/RecursiveAE2PatternProvider/issues) · [My upstream contributions](https://github.com/Lumengrid/RecursiveAE2PatternProvider/issues/16)
 
+## Requirements
 
-## ✨ Features
+- Minecraft **26.1.2**, NeoForge **26.1.2.109**, and Java **25**.
+- Applied Energistics 2 for Minecraft 26.1.2. I use **26.1.13-beta** in my FTB Evolution 2 setup.
+- Optional integrations: AdvancedAE, ExtendedAE, ExtendedAE Plus, and Wireless Comprehensive Work Terminal.
 
+## Install
 
-### 🎯 **Automatic Pattern Generation**
-- **Smart Dependencies**: Automatically creates patterns for missing crafting ingredients
-- **Recursive Logic**: Generates patterns for ingredients of ingredients, as deep as you configure
-- **Recipe Discovery**: Only creates patterns for items that have valid crafting recipes
+1. Download `otter-patterns-1.1.0.jar` from Releases.
+2. Close Minecraft and stop the server before replacing an older version.
+3. Put the JAR in the client and server `mods` folders, or just the client folder for single-player.
+4. Remove the older Recursive AE2 Pattern Provider JAR from `mods`, then launch again.
 
+I retain the original mod ID, `recursiveae2patternprovider`, so this replaces the original mod. Install only one copy. Existing recursive flags and the config filename remain compatible.
 
-### 🔧 **Per-Pattern Control**
-- **Add Recursion**: Craft any AE2 pattern with the configured recipe item (default: iron ingot) to make it recursive
-- **Universal Support**: Works with ALL AE2 pattern types:
-- Crafting Patterns
-- Processing Patterns
-- Smithing Table Patterns
-- Stonecutting Patterns
-- **Remove Recursion**: Craft recursive pattern alone (without the recipe item) to make it normal
+## Use it
 
+Encode your final crafting recipe in an AE2 Pattern Encoding Terminal and enable its recursive toggle. Put that pattern in a connected Pattern Provider with access to Molecular Assemblers. The provider generates eligible crafting dependencies, such as planks and sticks, for AE2 to plan and execute.
 
-### 🎨 **Visual Feedback**
-- **Enhanced Tooltips**: Clear indicators showing recursive status and usage instructions
-- **Color Tinting**: Recursive patterns show with distinctive green coloring
-- **Smart Instructions**: Tooltips show how to enable/disable recursion
+You can also combine an encoded pattern with an iron ingot to mark it recursive. The required item is configurable. Craft a recursive pattern by itself to remove the recursive flag.
 
-
-### ⚙️ **Configuration Options**
-- **Recursion Depth**: Control how deep pattern generation goes (-1 = unlimited, 0 = disabled, 1+ = limited)
-- **Recipe Item**: Customize which item is required to craft recursive patterns (default: `minecraft:iron_ingot`)
-- **Substitute Inheritance**: Auto-generated patterns inherit substitute settings from parent patterns
-- **Default Settings**: Configure default substitute behavior for patterns without parent context
-
-
-## 🎮 How to Use
-
-
-### **Step 1: Create Your Pattern**
-Create any AE2 pattern normally (e.g., Iron Pickaxe recipe)
-
-
-### **Step 2: Make it Recursive**
-```
-[AE2 Pattern] + [Recipe Item] → [Recursive Pattern]
-```
-Craft the pattern with the configured recipe item (default: iron ingot) in any crafting table
-
-### **Step 2b: Remove Recursion (Optional)**
-```
-[Recursive Pattern] → [Normal Pattern]
-```
-Craft the recursive pattern alone (without the recipe item) to make it normal again
-
-### **💡 Customizing the Recipe Item**
-To change which item is required for crafting recursive patterns, edit your mod configuration:
-```toml
-[recursiveae2patternprovider-common.toml]
-recipeItem = "minecraft:diamond"  # Use diamond instead of iron
-# Or use any other item:
-# recipeItem = "minecraft:gold_ingot"
-# recipeItem = "minecraft:emerald"
-# recipeItem = "ae2:calculation_processor"
-```
-
-### **Step 3: Install in Pattern Provider**
-Place the recursive pattern in your Pattern Provider
-
-
-### **Step 4: Automatic Magic**
-The mod automatically generates patterns for:
-- Sticks (if Iron Pickaxe needs them)
-- Iron Ingots (if you're using raw iron)
-- Any other missing intermediate components
-
-
-### **Example Scenario**
-**Traditional AE2**: To autocraft Iron Pickaxes, you manually create:
-- Iron Pickaxe pattern
-- Stick pattern
-- Iron Ingot smelting pattern (if using raw iron)
-- Wood plank pattern (if making sticks from logs)
-- ... and so on
-
-
-**With This Mod**: Create ONE recursive Iron Pickaxe pattern → All dependencies auto-generated!
-
-
-## 📋 Configuration
-
-
-The mod includes several configuration options in `config/recursiveae2patternprovider-common.toml`:
-
+To start new encoding sessions in recursive mode, add this to `config/recursiveae2patternprovider-common.toml`:
 
 ```toml
-# Enable/disable the entire mod
-enableRecursiveAE2PatternProvider = true
-
-
-# Maximum recursion depth (-1 = unlimited, 0 = disabled, 1+ = limited depth)
-recursionDepth = -1
-
-
-# Default substitute settings for auto-generated patterns
-defaultAllowSubstitutes = false
-defaultAllowFluidSubstitutes = false
+defaultRecursiveMode = true
 ```
 
+In multiplayer, the server supplies the initial toggle state. You can still switch it off in the terminal. Existing stored patterns are not converted automatically.
 
-## 🔧 Technical Details
+## What I changed
 
+- Preserve empty slots in shaped recipes, including clocks.
+- Offer recipe alternatives so AE2 can use available materials without expanding compression loops.
+- Generate valid ingredient variants and keep the selected materials fixed during execution.
+- Add short orange tooltips explaining what a missing source would produce.
+- Refresh stale ingredient keys before new plans when the crafting network is idle.
+- Add a server-synchronized default for recursive encoding.
 
-### **Compatibility**
-- **Minecraft**: 1.21.1
-- **NeoForge**: Latest
-- **Applied Energistics 2**: Required
-- **Server/Client**: Works on both dedicated servers and single-player
+## Configuration
 
+The common config lives at `config/recursiveae2patternprovider-common.toml`.
 
-### **Performance**
-- **Smart Caching**: Prevents duplicate pattern generation
-- **Efficient Processing**: Only generates patterns when actually needed
-- **AE2 Integration**: Uses AE2's existing pattern system for maximum compatibility
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `defaultRecursiveMode` | `false` | Start new encoding sessions with recursion enabled. |
+| `recursionDepth` | `-1` | Unlimited depth; `0` disables generation, positive values limit depth. |
+| `retainRecipeAlternatives` | `true` | Let AE2 consider bounded alternative recipe routes. |
+| `generatedIngredientAlternatives` | `true` | Generate valid material variants with exact execution inputs. |
+| `recipeItem` | `"minecraft:iron_ingot"` | Item used to mark an encoded pattern recursive. |
 
+## Scope
 
-**Transform your AE2 experience from tedious pattern management to effortless automation mastery!**
+I generate crafting dependencies; machine operations such as smelting still need existing processing patterns or supplied materials. Species-specific recipes still require their specific wood. Recipe choices are bounded and do not guarantee the cheapest possible route. The stale-key refresh covers ordinary AE2 and AdvancedAE providers and waits while a crafting CPU is busy.
+
+## Build from source
+
+Use JDK 23 to run the included Gradle wrapper. The configured toolchain resolves Java 25 for compilation.
+
+```sh
+./gradlew build
+```
+
+On Windows, use `gradlew.bat build`. The installable JAR is written to `build/libs/`. GitHub Actions also attaches the JAR to successful builds.
+
+## Credits
+
+Original mod by **Lumengrid**. Fork maintenance and the changes above by **Cupears**. I keep the upstream licensing and attribution intact. My individual contributions remain available as separate upstream pull requests.
