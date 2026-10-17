@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0-beta.12
+
+- Added a searchable icon picker to view ingredient alternatives together.
+- Fixed shapeless ingredient substitutions when transferred slots differ from recipe order.
+- Start ingredient previews on a non-cyclic choice and mark cyclic alternatives.
+
 ## 1.2.0-beta.11
 
 - Redesigned the personal blacklist with searchable rows, item previews, and full recipe-ID tooltips.

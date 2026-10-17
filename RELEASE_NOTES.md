@@ -1,3 +1,3 @@
-- Redesigned the personal blacklist with searchable rows, item previews, and full recipe-ID tooltips.
-- Added dedicated remove buttons, a scrollbar, recipe counts, and a Done button.
-- Kept blacklist controls separate from tree clicks and zoom shortcuts.
+- Added a searchable icon picker to view ingredient alternatives together.
+- Fixed shapeless ingredient substitutions when transferred slots differ from recipe order.
+- Start ingredient previews on a non-cyclic choice and mark cyclic alternatives.

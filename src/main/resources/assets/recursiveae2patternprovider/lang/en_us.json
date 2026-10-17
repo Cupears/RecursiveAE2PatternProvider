@@ -82,6 +82,12 @@
   "gui.recursiveae2patternprovider.tree.defaults_save_error": "Pattern saved, but personal defaults could not be saved.",
   "gui.recursiveae2patternprovider.tree.always_hint": "Blacklisted by default for new recursive patterns.",
   "gui.recursiveae2patternprovider.tree.compressed": "Compressed route starts collapsed. Expand it to inspect.",
-  "gui.recursiveae2patternprovider.tree.group_help": "Use < / > to inspect a choice. Collapsed previews cycle; only one accepted item is needed per ingredient.",
+  "gui.recursiveae2patternprovider.tree.group_help": "Open Choices to see accepted items together. Recipe variants use < / >. Only one choice is needed per ingredient.",
+  "gui.recursiveae2patternprovider.tree.choices_button": "Choices: %s",
+  "gui.recursiveae2patternprovider.tree.choices_title": "Ingredient choices",
+  "gui.recursiveae2patternprovider.tree.choices_help": "Select an item to inspect its paths. This does not lock the recipe.",
+  "gui.recursiveae2patternprovider.tree.choices_count": "%s accepted items",
+  "gui.recursiveae2patternprovider.tree.choices_select": "Click to inspect this item's recipes.",
+  "gui.recursiveae2patternprovider.tree.choices_cycle": "Cycle: this ingredient leads back to the output.",
   "gui.recursiveae2patternprovider.tree.ingredient_choice": "Choose one of %s accepted items."
 }

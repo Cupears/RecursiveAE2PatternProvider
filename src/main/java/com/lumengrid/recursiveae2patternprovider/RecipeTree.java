@@ -48,9 +48,12 @@ public record RecipeTree(List<Node> nodes, boolean truncated) {
             var candidates = input.getPossibleInputs();
             var preferred = IngredientChoices.prefer(Arrays.stream(candidates)
                     .filter(c -> c.what() instanceof AEItemKey).map(c -> ((AEItemKey)c.what()).getItem()).toList());
-            for (var candidate : candidates) {
+            var ordered = Arrays.stream(candidates).sorted(Comparator.comparingInt(c ->
+                    c.what() instanceof AEItemKey key && key.getItem() == output.getItem() ? 1 : 0)).toList();
+            for (var candidate : ordered) {
                 if (!(candidate.what() instanceof AEItemKey key) || !unique.add(candidate)) continue;
                 if (!preferred.contains(key.getItem())) continue;
+                if (!input.isValid(key, level)) continue;
                 var stack = key.toStack(displayAmount(candidate.amount(), input.getMultiplier()));
                 nodes.add(new Node(0, false, stack, "", List.of(), stack.is(output.getItem()) ? 2 : 0, choice));
             }

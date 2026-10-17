@@ -368,7 +368,20 @@ public final class EditorSmoke {
                 var nodes = (List<RecipeTree.Node>)field("nodes");
                 check(groups.get(glass).stream().allMatch(id -> nodes.get(id).item().getCount() == 2), "Glass quantity was not preserved");
                 record("Glass choices displayed as one ingredient requiring two items, plus one iron requirement");
-                next(35);
+                selectedChoiceGroup = glass; focusNode(glass); next(38);
+            } else if (phase == 38 && ticks - since > 10) {
+                mc.screen.mouseClicked(new MouseButtonEvent(45, 152, new MouseButtonInfo(0, 0)), false);
+                check((int)field("choosingGroup") == selectedChoiceGroup, "Choices button did not open ingredient picker");
+                next(39);
+            } else if (phase == 39 && ticks - since > 10) {
+                shot("recipe-ingredient-choices");
+                var search = (net.minecraft.client.gui.components.EditBox)field("choicesSearch"); search.setValue("tinted");
+                mc.screen.mouseClicked(new MouseButtonEvent(screenInt("choicesX") + 22, screenInt("choicesY") + 82, new MouseButtonInfo(0, 0)), false);
+                check((int)field("choosingGroup") == -1, "Selecting a choice did not close picker");
+                var nodes = (List<RecipeTree.Node>)field("nodes");
+                check(nodes.get(displayNode(selectedChoiceGroup)).item().is(Items.TINTED_GLASS), "Picker search selected the wrong item");
+                check(((Set<Integer>)field("expanded")).contains(selectedChoiceGroup), "Selected ingredient path did not expand");
+                record("Ingredient picker showed alternatives together and searched/selected a glass variant"); next(35);
             } else if (phase == 35 && ticks - since > 10) {
                 shot("recipe-tree-glass-choices");
                 var defaults = (Set<String>)field("personalDefaults");
@@ -399,6 +412,40 @@ public final class EditorSmoke {
                 check(!(boolean)field("managingDefaults"), "Escape did not close blacklist");
                 check(mc.screen.children().stream().filter(wi -> wi instanceof Button b && b.getMessage().getString().equals("Save")).allMatch(wi -> ((Button)wi).visible), "Tree buttons stayed hidden");
                 record("Blacklist search, explicit remove buttons, scrolling, Escape and modal input isolation passed");
+                clickButton("Cancel"); next(40);
+            } else if (phase == 40 && ticks - since > 20) {
+                var server = mc.getSingleplayerServer(); server.execute(() -> {
+                    try {
+                        var player = server.getPlayerList().getPlayers().getFirst(); var manager = server.getRecipeManager();
+                        var wool = net.minecraft.world.item.crafting.Ingredient.of(net.minecraft.core.registries.BuiltInRegistries.ITEM.getOrThrow(net.minecraft.tags.ItemTags.WOOL));
+                        var recipe = new net.minecraft.world.item.crafting.ShapelessRecipe(null, null, new ItemStackTemplate(Items.ORANGE_WOOL), List.of(wool, net.minecraft.world.item.crafting.Ingredient.of(Items.ORANGE_DYE)));
+                        var holder = new net.minecraft.world.item.crafting.RecipeHolder<net.minecraft.world.item.crafting.CraftingRecipe>(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.RECIPE, net.minecraft.resources.Identifier.parse("smoke:orange_wool")), recipe);
+                        var recipes = new ArrayList<net.minecraft.world.item.crafting.RecipeHolder<?>>(manager.getRecipes()); recipes.add(holder);
+                        var recipeField = manager.getClass().getDeclaredField("recipes"); recipeField.setAccessible(true); recipeField.set(manager, net.minecraft.world.item.crafting.RecipeMap.create(recipes));
+                        var input = new ItemStack[9]; Arrays.fill(input, ItemStack.EMPTY); input[0] = new ItemStack(Items.ORANGE_DYE); input[1] = new ItemStack(Items.ORANGE_WOOL);
+                        var encoded = PatternDetailsHelper.encodeCraftingPattern(holder, input, new ItemStack(Items.ORANGE_WOOL), true, false); PatternUtil.setRecursive(encoded, true);
+                        ((com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu)player.containerMenu).recursiveAE2$treeSlot().set(encoded); player.containerMenu.broadcastChanges();
+                    } catch (Throwable e) { serverFailure = e; }
+                }); next(41);
+            } else if (phase == 41 && ticks - since > 30) {
+                clickTreeButton(); next(42);
+            } else if (phase == 42 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
+                var nodes = (List<RecipeTree.Node>)field("nodes"); var groups = (Map<Integer, List<Integer>>)field("groupMembers");
+                var roots = ((Map<Integer, List<Integer>>)field("groupedChildren")).get(0);
+                selectedChoiceGroup = roots.stream().filter(id -> nodes.get(id).item().is(net.minecraft.tags.ItemTags.WOOL)).findFirst().orElseThrow();
+                check(groups.get(selectedChoiceGroup).size() == 16, "Orange dyeing lost wool alternatives");
+                check(!nodes.get(displayNode(selectedChoiceGroup)).item().is(Items.ORANGE_WOOL), "Dyeing preview still defaults to its own output");
+                focusNode(selectedChoiceGroup); next(43);
+            } else if (phase == 43 && ticks - since > 10) {
+                mc.screen.mouseClicked(new MouseButtonEvent(45, 152, new MouseButtonInfo(0, 0)), false);
+                check((int)field("choosingGroup") == selectedChoiceGroup, "Wool picker did not open"); next(44);
+            } else if (phase == 44 && ticks - since > 10) {
+                shot("recipe-wool-choices");
+                var search = (net.minecraft.client.gui.components.EditBox)field("choicesSearch"); search.setValue("white_wool");
+                mc.screen.mouseClicked(new MouseButtonEvent(screenInt("choicesX") + 22, screenInt("choicesY") + 82, new MouseButtonInfo(0, 0)), false);
+                var nodes = (List<RecipeTree.Node>)field("nodes");
+                check(nodes.get(displayNode(selectedChoiceGroup)).item().is(Items.WHITE_WOOL), "Wool picker did not select white wool");
+                record("Dye-first orange-wool pattern offered all wool colors, marked its cycle and selected white wool");
                 clickButton("Cancel"); finish(mc, "PASS");
             }
         } catch (Throwable e) {
@@ -406,7 +453,7 @@ public final class EditorSmoke {
             catch (Exception nested) { RecursiveAE2PatternProvider.LOGGER.error("Smoke failure", e); failed = true; mc.stop(); }
         }
     }
-    private static int selectedRecipe, selectedVariant, earlyRecipe;
+    private static int selectedRecipe, selectedVariant, earlyRecipe, selectedChoiceGroup;
     private static void setField(String name, int value) throws Exception {
         var f = RecipeTreeScreen.class.getDeclaredField(name); f.setAccessible(true); f.setInt(Minecraft.getInstance().screen, value);
     }
@@ -416,6 +463,10 @@ public final class EditorSmoke {
     }
     private static Object field(String name) throws Exception {
         var f = RecipeTreeScreen.class.getDeclaredField(name); f.setAccessible(true); return f.get(Minecraft.getInstance().screen);
+    }
+    private static int screenInt(String name) throws Exception {
+        var method = RecipeTreeScreen.class.getDeclaredMethod(name); method.setAccessible(true);
+        return (int)method.invoke(Minecraft.getInstance().screen);
     }
     private static boolean treeIdle() throws Exception { return ((Map<?, ?>)field("pending")).isEmpty() && ((Collection<?>)field("loadQueue")).isEmpty(); }
     private static ItemStack terminalPattern() {

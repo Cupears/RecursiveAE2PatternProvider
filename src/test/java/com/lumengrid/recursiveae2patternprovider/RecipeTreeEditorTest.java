@@ -24,6 +24,45 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(EphemeralTestServerProvider.class)
 class RecipeTreeEditorTest {
+    @Test void shapelessOverlappingIngredientsUseDistinctRoles(MinecraftServer server) {
+        var recipe = new ShapelessRecipe(null, null, new ItemStackTemplate(Items.CLOCK), List.of(
+                Ingredient.of(Items.IRON_INGOT, Items.COPPER_INGOT), Ingredient.of(Items.COPPER_INGOT)));
+        var slots = Arrays.asList(new GenericStack(AEItemKey.of(Items.COPPER_INGOT), 1), null,
+                new GenericStack(AEItemKey.of(Items.IRON_INGOT), 1));
+        var copper = ShapelessIngredients.at(recipe, slots, 0).orElseThrow();
+        var iron = ShapelessIngredients.at(recipe, slots, 2).orElseThrow();
+        assertEquals(1, copper.items().count()); assertTrue(copper.test(new ItemStack(Items.COPPER_INGOT)));
+        assertEquals(2, iron.items().count()); assertTrue(iron.test(new ItemStack(Items.IRON_INGOT)));
+        assertTrue(ShapelessIngredients.at(recipe, slots, 1).isEmpty());
+    }
+    @Test void orangeWoolShapelessFindsOtherColorsEvenWithDyeTransferredFirst(MinecraftServer server) throws Exception {
+        var wool = Ingredient.of(net.minecraft.core.registries.BuiltInRegistries.ITEM.getOrThrow(net.minecraft.tags.ItemTags.WOOL));
+        var recipe = new ShapelessRecipe(null, null, new ItemStackTemplate(Items.ORANGE_WOOL), List.of(wool, Ingredient.of(Items.ORANGE_DYE)));
+        var holder = new RecipeHolder<CraftingRecipe>(ResourceKey.create(Registries.RECIPE, Identifier.parse("test:orange_wool")), recipe);
+        withRecipes(server, List.of(holder, recipe("test:white_wool", Items.STRING, Items.WHITE_WOOL, 1)), () -> {
+            var level = recipeLevel(server);
+            var input = new ItemStack[9]; Arrays.fill(input, ItemStack.EMPTY);
+            input[0] = new ItemStack(Items.ORANGE_DYE); input[1] = new ItemStack(Items.ORANGE_WOOL);
+            assertTrue(recipe.matches(CraftingInput.of(3, 3, Arrays.asList(input)), level));
+            var encoded = PatternDetailsHelper.encodeCraftingPattern(holder, input, new ItemStack(Items.ORANGE_WOOL), true, false);
+            PatternUtil.setRecursive(encoded, true);
+            var root = new appeng.crafting.pattern.AECraftingPattern(AEItemKey.of(encoded), level);
+            assertTrue(root.isItemValid(1, AEItemKey.of(Items.WHITE_WOOL), level));
+            assertFalse(root.isItemValid(1, AEItemKey.of(Items.ORANGE_DYE), level));
+            var tree = RecipeTree.build(root, level);
+            var woolNodes = tree.nodes().stream().filter(n -> n.choice() == 1).toList();
+            assertTrue(woolNodes.size() >= 15, "Shapeless lookup dropped wool substitutes");
+            assertFalse(woolNodes.getFirst().item().is(Items.ORANGE_WOOL));
+            assertTrue(woolNodes.stream().anyMatch(n -> n.item().is(Items.WHITE_WOOL) && n.note() == 0));
+            assertTrue(woolNodes.stream().filter(n -> n.item().is(Items.ORANGE_WOOL)).allMatch(n -> n.note() == 2));
+            assertTrue(tree.nodes().stream().filter(n -> n.choice() == 0).allMatch(n -> n.item().is(Items.ORANGE_DYE)));
+            var generated = RecursivePatternGenerator.generate(List.of(root), level, -1);
+            assertTrue(consumes(generated, Items.STRING), "Recursive planning did not discover the white wool route");
+            var exactEncoded = PatternDetailsHelper.encodeCraftingPattern(holder, input, new ItemStack(Items.ORANGE_WOOL), false, false);
+            var exact = RecipeTree.build(new appeng.crafting.pattern.AECraftingPattern(AEItemKey.of(exactEncoded), level), level);
+            assertEquals(3, exact.nodes().size()); // Exact mode must not silently become substitutable.
+        });
+    }
     @Test void nativeWoolTagChoicesStayGroupedAcrossPrimaryAndNetworkChanges(MinecraftServer server) throws Exception {
         var wool = Ingredient.of(net.minecraft.core.registries.BuiltInRegistries.ITEM.getOrThrow(net.minecraft.tags.ItemTags.WOOL));
         int accepted = (int)wool.items().count(); assertTrue(accepted > 1);

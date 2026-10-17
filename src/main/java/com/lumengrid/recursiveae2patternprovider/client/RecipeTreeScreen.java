@@ -34,6 +34,8 @@ public final class RecipeTreeScreen extends Screen {
     private final List<Button> defaultRemoveButtons = new ArrayList<>();
     private EditBox defaultsSearch;
     private boolean defaultsDragging;
+    private int choosingGroup = -1, choicesScroll;
+    private EditBox choicesSearch;
     private final Map<Integer, Integer> groupHeads = new HashMap<>();
     private final Map<Integer, List<Integer>> groupMembers = new HashMap<>();
     private final Map<Integer, Map<Object, Integer>> siblingGroups = new HashMap<>();
@@ -97,7 +99,8 @@ public final class RecipeTreeScreen extends Screen {
     private int displayed(int id) {
         int head = head(id);
         var members = groupMembers.getOrDefault(head, List.of(id));
-        int choice = variantChoice.getOrDefault(head, head == hoveredHead ? hoveredVariant : expanded.contains(head) ? 0 : ticks / 40);
+        int choice = variantChoice.getOrDefault(head, head == hoveredHead ? hoveredVariant
+                : !nodes.get(head).recipe() || expanded.contains(head) ? 0 : ticks / 40);
         return members.get(Math.floorMod(choice, members.size()));
     }
     private List<Integer> visibleChildren(int id) { return groupedChildren.getOrDefault(displayed(id), List.of()); }
@@ -198,6 +201,7 @@ public final class RecipeTreeScreen extends Screen {
         saveButton.active = !waiting && !invalidSession;
         updateButtons();
         if (managingDefaults) openDefaults();
+        else if (choosingGroup >= 0) openChoices(choosingGroup);
     }
     private void updateButtons() {
         cancelButton.active = !waiting;
@@ -365,7 +369,7 @@ public final class RecipeTreeScreen extends Screen {
             }
             if (children.containsKey(actual) || (!node.recipe() && box.id() != 0 && node.note() == 0 && !sharedBranches.containsKey(actual) && !complete.contains(actual))) g.text(font, expanded.contains(box.id()) ? "[-]" : "[+]", box.x() + CARD_WIDTH - 24, box.y() + CARD_HEIGHT - 12, ORANGE, false);
             var variants = groupMembers.get(box.id());
-            if (variants != null && variants.size() > 1) g.text(font, "< " + (variants.indexOf(actual) + 1) + "/" + variants.size() + " >",
+            if (variants != null && variants.size() > 1) g.text(font, node.recipe() ? "< " + (variants.indexOf(actual) + 1) + "/" + variants.size() + " >" : tr("choices_button", variants.size()).getString(),
                     box.x() + (node.recipe() ? 63 : 5), box.y() + (node.recipe() ? 68 : CARD_HEIGHT - 12), 0xFF61401E, false);
             if (inCanvas(mx, my) && x >= box.x() && x < box.x() + CARD_WIDTH && y >= box.y() && y < box.y() + CARD_HEIGHT) hovered = box;
         }
@@ -373,6 +377,7 @@ public final class RecipeTreeScreen extends Screen {
         g.text(font, tr("count", excluded.size(), snapshot.excluded().size()), 12, height - 61, 0xFF493729, false);
         g.textWithWordWrap(font, status.getString().isEmpty() ? tr("help") : status, 12, height - 46, width - 24, 0xFF493729, false);
         if (managingDefaults) { hoveredHead = -1; renderDefaults(g, mx, my); super.extractRenderState(g, mx, my, partial); return; }
+        if (choosingGroup >= 0) { hoveredHead = -1; renderChoices(g, mx, my); super.extractRenderState(g, mx, my, partial); return; }
         super.extractRenderState(g, mx, my, partial);
         if (hovered == null) hoveredHead = -1;
         else {
@@ -482,7 +487,89 @@ public final class RecipeTreeScreen extends Screen {
         defaultsScroll = (int)Math.round(Math.clamp((my - defaultsY() - 70) / (defaultsRows() * 26.0), 0, 1) * max);
         rebuildDefaultRows();
     }
+    private int choicesWidth() { return Math.min(460, width - 24); }
+    private int choicesHeight() {
+        int count = groupMembers.getOrDefault(choosingGroup, List.of()).size();
+        int rows = Math.max(1, (count + choicesColumns() - 1) / choicesColumns());
+        return Math.min(Math.min(260, height - 24), 114 + rows * 26);
+    }
+    private int choicesX() { return (width - choicesWidth()) / 2; }
+    private int choicesY() { return (height - choicesHeight()) / 2; }
+    private int choicesColumns() { return Math.max(1, (choicesWidth() - 20) / 26); }
+    private int choicesRows() { return Math.max(1, (choicesHeight() - 114) / 26); }
+    private List<Integer> filteredChoices() {
+        String query = choicesSearch == null ? "" : choicesSearch.getValue().strip().toLowerCase(Locale.ROOT);
+        return groupMembers.getOrDefault(choosingGroup, List.of()).stream().filter(id -> {
+            var item = nodes.get(id).item();
+            return item.getHoverName().getString().toLowerCase(Locale.ROOT).contains(query)
+                    || net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item.getItem()).toString().contains(query);
+        }).toList();
+    }
+    private void openChoices(int group) {
+        choosingGroup = head(group); choicesScroll = 0; dragging = false;
+        children().stream().filter(w -> w instanceof AbstractWidget).forEach(w -> ((AbstractWidget)w).visible = false);
+        choicesSearch = new EditBox(font, choicesX() + 58, choicesY() + 43, choicesWidth() - 68, 18, tr("defaults_search"));
+        choicesSearch.setMaxLength(256); choicesSearch.setResponder(value -> choicesScroll = 0);
+        defaultsWidgets.add(addRenderableWidget(choicesSearch));
+        defaultsWidgets.add(addRenderableWidget(Button.builder(tr("defaults_done"), b -> closeChoices())
+                .bounds(choicesX() + choicesWidth() - 90, choicesY() + choicesHeight() - 28, 80, 20).build(MenuButton::new)));
+        setFocused(choicesSearch);
+    }
+    private void closeChoices() {
+        choosingGroup = -1; choicesSearch = null; setFocused(null);
+        for (var widget : defaultsWidgets) removeWidget(widget);
+        defaultsWidgets.clear();
+        children().stream().filter(w -> w instanceof AbstractWidget).forEach(w -> ((AbstractWidget)w).visible = true);
+        updateButtons();
+    }
+    private int choicesMaxScroll() { return Math.max(0, (filteredChoices().size() + choicesColumns() - 1) / choicesColumns() - choicesRows()); }
+    private int choiceAt(double mx, double my) {
+        int x = (int)Math.floor(mx - choicesX() - 10), y = (int)Math.floor(my - choicesY() - 70);
+        if (x < 0 || y < 0 || x >= choicesColumns() * 26 || y >= choicesRows() * 26) return -1;
+        int index = (choicesScroll + y / 26) * choicesColumns() + x / 26;
+        var ids = filteredChoices(); return index < ids.size() ? ids.get(index) : -1;
+    }
+    private void renderChoices(GuiGraphicsExtractor g, int mx, int my) {
+        int x = choicesX(), y = choicesY(), w = choicesWidth(), h = choicesHeight();
+        g.fill(0, 0, width, height, 0xA018120D); panel(g, x, y, w, h, 0xFFF0D7BA);
+        g.fill(x + 1, y + 1, x + w - 1, y + 3, 0xFFFFAA44);
+        g.text(font, tr("choices_title"), x + 10, y + 10, 0xFF392B20, false);
+        g.text(font, shortened(tr("choices_help").getString(), w - 20), x + 10, y + 26, 0xFF614B35, false);
+        g.text(font, tr("defaults_search_label"), x + 10, y + 48, 0xFF614B35, false);
+        var ids = filteredChoices(); choicesScroll = Math.clamp(choicesScroll, 0, choicesMaxScroll());
+        int start = choicesScroll * choicesColumns(), end = Math.min(ids.size(), start + choicesRows() * choicesColumns());
+        int hover = choiceAt(mx, my), current = displayed(choosingGroup);
+        for (int i = start; i < end; i++) {
+            int id = ids.get(i), cellX = x + 10 + (i - start) % choicesColumns() * 26, cellY = y + 70 + (i - start) / choicesColumns() * 26;
+            var node = nodes.get(id);
+            panel(g, cellX, cellY, 24, 24, node.note() == 2 ? 0xFFC2ADA0 : id == hover ? 0xFFFFE4C3 : 0xFFF9E8D2);
+            if (id == current) g.outline(cellX, cellY, 24, 24, 0xFFFF962E);
+            g.item(node.item(), cellX + 4, cellY + 4); g.itemDecorations(font, node.item(), cellX + 4, cellY + 4);
+            if (node.note() == 2) g.text(font, "x", cellX + 17, cellY + 1, 0xFF9B3B26, false);
+        }
+        if (ids.isEmpty()) g.text(font, tr("defaults_no_results"), x + 10, y + 76, 0xFF614B35, false);
+        g.text(font, tr("choices_count", ids.size()), x + 10, y + h - 21, 0xFF614B35, false);
+        if (choicesMaxScroll() > 0) {
+            int track = choicesRows() * 26, thumb = Math.max(12, track * choicesRows() / (choicesMaxScroll() + choicesRows()));
+            panel(g, x + w - 8, y + 70 + (track - thumb) * choicesScroll / choicesMaxScroll(), 5, thumb, 0xFFFFBA6C);
+        }
+        if (hover >= 0) {
+            var node = nodes.get(hover); var lines = new ArrayList<Component>();
+            lines.add(node.item().getHoverName());
+            lines.add(Component.literal(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(node.item().getItem()).toString()));
+            lines.add(tr(node.note() == 2 ? "choices_cycle" : "choices_select"));
+            g.setComponentTooltipForNextFrame(font, lines, mx, my);
+        }
+    }
     @Override public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (choosingGroup >= 0) {
+            int choice = choiceAt(event.x(), event.y());
+            if (event.button() == 0 && choice >= 0 && nodes.get(choice).note() != 2) {
+                variantChoice.put(choosingGroup, groupMembers.get(choosingGroup).indexOf(choice));
+                selected = choice; expanded.add(choosingGroup); layoutDirty = true; closeChoices();
+            } else super.mouseClicked(event, doubleClick);
+            return true;
+        }
         if (managingDefaults) {
             if (event.button() == 0 && event.x() >= defaultsX() + defaultsWidth() - 19 && event.x() < defaultsX() + defaultsWidth() - 9
                     && event.y() >= defaultsY() + 70 && event.y() < defaultsY() + 70 + defaultsRows() * 26) {
@@ -499,6 +586,7 @@ public final class RecipeTreeScreen extends Screen {
             boolean overTypes = recipeCard ? x >= box.x() + 63 && y >= box.y() + 63 && y < box.y() + 79
                     : y >= box.y() + CARD_HEIGHT - 18 && x < box.x() + 85;
             if (variants.size() > 1 && overTypes) {
+                if (!recipeCard) { openChoices(box.id()); return true; }
                 int direction = x < box.x() + (recipeCard ? 80 : 25) ? -1 : 1;
                 variantChoice.put(box.id(), Math.floorMod(variants.indexOf(actual) + direction, variants.size()));
                 selected = displayed(box.id()); layoutDirty = true; updateButtons(); return true;
@@ -528,12 +616,14 @@ public final class RecipeTreeScreen extends Screen {
         dragging = event.button() == 0; return true;
     }
     @Override public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+        if (choosingGroup >= 0) { super.mouseDragged(event, dx, dy); return true; }
         if (managingDefaults) { if (defaultsDragging) dragDefaults(event.y()); else super.mouseDragged(event, dx, dy); return true; }
         if (dragging) { panX += dx; panY += dy; return true; }
         return super.mouseDragged(event, dx, dy);
     }
     @Override public boolean mouseReleased(MouseButtonEvent event) { dragging = false; defaultsDragging = false; return super.mouseReleased(event); }
     @Override public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        if (choosingGroup >= 0) { choicesScroll = Math.clamp(choicesScroll - (int)Math.signum(vertical), 0, choicesMaxScroll()); return true; }
         if (managingDefaults) {
             defaultsScroll -= (int)Math.signum(vertical) * 3; rebuildDefaultRows(); return true;
         }
@@ -543,6 +633,7 @@ public final class RecipeTreeScreen extends Screen {
         panX += horizontal * 40; return true;
     }
     @Override public boolean keyPressed(KeyEvent event) {
+        if (choosingGroup >= 0) { if (event.isEscape()) closeChoices(); else super.keyPressed(event); return true; }
         if (managingDefaults) { if (event.isEscape()) closeDefaults(); else super.keyPressed(event); return true; }
         if (event.key() == 61 || event.key() == 334) { zoom = Math.min(1.5, zoom + .1); return true; }
         if (event.key() == 45 || event.key() == 333) { zoom = Math.max(.15, zoom - .1); return true; }
