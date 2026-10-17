@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.1.3.jar` from Releases.
+1. Download `otter-patterns-1.2.0-beta.12.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
 4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.
@@ -49,6 +49,26 @@ To start with recursion off instead, set `defaultRecursiveMode = false`. Existin
 - Refresh stale ingredient keys before new plans when the crafting network is idle.
 - Add a server-synchronized default for recursive encoding, with an explicit off toggle that also works when re-encoding.
 - Load optional wireless-terminal integration only when its mod is installed.
+
+## Recipe-tree editor
+
+On this feature branch, I added a light-orange recipe-tree editor with AE2-style panels.
+
+1. Put a recursive pattern in the Pattern Encoding Terminal's encoded-pattern slot.
+2. Click **Configure recipe tree** beside the encoding options. The tree opens expanded, with the requested item on the left and its dependencies extending to the right.
+3. **Shift-click a recipe** to disable or re-enable that exact recipe everywhere within this pattern. Other recipes making the same item stay available. **Disable route** and right-click provide the same recipe-wide toggle.
+4. **Always block** remembers the selected recipe for new recursive patterns. **Defaults** lets me review or remove remembered recipes.
+5. **Save** keeps the pattern edits and personal defaults and returns to the terminal. **Cancel** or Escape discards unsaved edits.
+
+Use the mouse wheel to zoom toward the cursor, drag the empty canvas to pan, and use `+` / `-` for keyboard zoom. **Reset rules** clears this pattern's exclusions; **Reset view** recenters the tree. The button also supports the Wireless Comprehensive Work Terminal's crafting panel.
+
+I save up to 128 exact recipe exclusions on the encoded pattern. They survive copying, saving, and re-encoding. This filters dependencies generated for that pattern; AE2's shared network can still use manually supplied patterns or routes offered by other recursive patterns/providers.
+
+Blocked recipe paths collapse immediately. Compressed-block routes start collapsed and remain available to expand. Accepted alternatives for each ingredient share a choice card, including glass and modded tags. Click **Choices** to see alternatives together in a searchable icon grid; selecting an item inspects its paths without locking the recipe. Separate required ingredients stay separate. Similar recipe routes also share compact cards: collapsed previews cycle, pause while hovered, and offer `<` / `>` controls to inspect each type. Grouping affects the view only; bans still target the displayed recipe ID.
+
+My personal blacklist is saved in `config/otter-patterns-recipe-defaults.json` on my client. Newly encoded recursive patterns inherit it in either supported terminal. Existing patterns retain their saved overrides when re-encoded. Removing a remembered recipe through Defaults affects future patterns; Reset rules affects the pattern being edited.
+
+Branches load automatically in small batches without a total node, recipe-count or depth cutoff. Repeated ingredients link to their already-expanded recipes, and circular paths stop at the repeated item. Recipe grids show example ingredients rather than a selected AE2 craft or ME inventory stock, so accepted wood and other variants may differ. Saved exclusions remain intact while the tree loads. If all routes are disabled, the item can still come from storage or a supplied pattern.
 
 ## Configuration
 

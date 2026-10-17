@@ -5,7 +5,14 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 public class ModNetwork {
     public static void registerPayloadHandlers(final RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar(RecursiveAE2PatternProvider.MODID);
+        var registrar = event.registrar("7");
+        registrar.playToServer(RecipeTreePackets.Defaults.TYPE, RecipeTreePackets.Defaults.CODEC, RecipeTreePackets.Defaults::handle);
+        registrar.playToServer(RecipeTreePackets.RequestOpen.TYPE, RecipeTreePackets.RequestOpen.CODEC, RecipeTreePackets.RequestOpen::handle);
+        registrar.playToClient(RecipeTreePackets.Branch.TYPE, RecipeTreePackets.Branch.CODEC, RecipeTreePackets.Branch::handle);
+        registrar.playToServer(RecipeTreePackets.Expand.TYPE, RecipeTreePackets.Expand.CODEC, RecipeTreePackets.Expand::handle);
+        registrar.playToClient(RecipeTreePackets.Open.TYPE, RecipeTreePackets.Open.CODEC, RecipeTreePackets.Open::handle);
+        registrar.playToClient(RecipeTreePackets.Result.TYPE, RecipeTreePackets.Result.CODEC, RecipeTreePackets.Result::handle);
+        registrar.playToServer(RecipeTreePackets.Save.TYPE, RecipeTreePackets.Save.CODEC, RecipeTreePackets.Save::handle);
         registrar.playToClient(PlanExplanationS2CPacket.TYPE, PlanExplanationS2CPacket.STREAM_CODEC, PlanExplanationS2CPacket::handle);
 
         registrar.playToServer(

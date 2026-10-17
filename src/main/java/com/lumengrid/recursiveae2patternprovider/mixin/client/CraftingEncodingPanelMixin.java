@@ -31,9 +31,13 @@ public abstract class CraftingEncodingPanelMixin {
     @Unique
     private ToggleButton recursiveBtn;
 
+    @Unique
+    private com.lumengrid.recursiveae2patternprovider.client.RecipeTreeButton treeButton;
+
     @Inject(method = "<init>", at = @At("TAIL"))
     private void addRecursiveButton(PatternEncodingTermScreen<?> screen, WidgetContainer widgets, CallbackInfo ci) {
         this.panelScreen = screen;
+        this.treeButton = new com.lumengrid.recursiveae2patternprovider.client.RecipeTreeButton();
 
         this.recursiveBtn = new ToggleButton(
                 Icon.S_SUBSTITUTION_ENABLED,
@@ -61,6 +65,15 @@ public abstract class CraftingEncodingPanelMixin {
 
     @Inject(method = "updateBeforeRender", at = @At("TAIL"))
     private void onUpdateBeforeRender(CallbackInfo ci) {
+        if (treeButton != null && fluidSubstitutionsBtn != null) {
+            treeButton.setX(fluidSubstitutionsBtn.getX() + 20);
+            treeButton.setY(fluidSubstitutionsBtn.getY());
+            treeButton.setVisibility(Config.ENABLE.get() && fluidSubstitutionsBtn.visible
+                    && com.lumengrid.recursiveae2patternprovider.client.RecipeTreeButton.canEdit(panelScreen.getMenu()));
+            var access = (ScreenAccessor) panelScreen;
+            if (!access.getRenderables().contains(treeButton)) access.getRenderables().add(treeButton);
+            if (!access.getChildren().contains(treeButton)) access.getChildren().add(treeButton);
+        }
         if (!Config.ENABLE.get() || !Config.ENABLE_ENCODING_GUI_TOGGLE.get()) {
             if (this.recursiveBtn != null) {
                 this.recursiveBtn.setVisibility(false);
@@ -87,6 +100,8 @@ public abstract class CraftingEncodingPanelMixin {
 
     @Inject(method = "setVisible", at = @At("TAIL"))
     private void onSetVisible(boolean visible, CallbackInfo ci) {
+        if (treeButton != null) treeButton.setVisibility(visible && Config.ENABLE.get()
+                && com.lumengrid.recursiveae2patternprovider.client.RecipeTreeButton.canEdit(panelScreen.getMenu()));
         if (this.recursiveBtn != null) {
             boolean shouldBeVisible = visible && Config.ENABLE.get() && Config.ENABLE_ENCODING_GUI_TOGGLE.get();
             this.recursiveBtn.setVisibility(shouldBeVisible);

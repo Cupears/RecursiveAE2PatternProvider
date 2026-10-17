@@ -26,7 +26,7 @@ class RecursiveModeSyncTest {
     void serverDefaultAndManualOverrideReachClientMenu(MinecraftServer server) throws Exception {
         var field = PatternEncodingTermMenu.class.getDeclaredField("recursiveModeActive");
         assertTrue(Modifier.isPublic(field.getModifiers()));
-        assertEquals(30000, field.getAnnotation(GuiSync.class).value());
+        assertEquals(com.lumengrid.recursiveae2patternprovider.menu.RecursiveMenuSync.RECURSIVE_MODE, field.getAnnotation(GuiSync.class).value());
         var serverMenu = emptyMenu();
         var clientMenu = emptyMenu();
         var serverField = SynchronizedField.create(serverMenu, field);

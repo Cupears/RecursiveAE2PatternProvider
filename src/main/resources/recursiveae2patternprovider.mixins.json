@@ -5,6 +5,7 @@
   "plugin": "com.lumengrid.recursiveae2patternprovider.mixin.RecursiveAE2MixinPlugin",
   "mixins": [
     "CraftingServiceMixin",
+    "ShapelessPatternIngredientsMixin",
     "CraftConfirmMenuMixin",
     "PatternProviderLogicMixin",
     "PatternEncodingTermMenuMixin",

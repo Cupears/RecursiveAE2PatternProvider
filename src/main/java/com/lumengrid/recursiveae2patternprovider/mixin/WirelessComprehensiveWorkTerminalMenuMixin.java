@@ -14,10 +14,21 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = WirelessComprehensiveWorkTerminalMenu.class, remap = false)
-public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRecursivePatternMenu {
+public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRecursivePatternMenu, com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu {
+    @org.spongepowered.asm.mixin.Shadow
+    private appeng.menu.slot.RestrictedInputSlot encodedPatternSlot;
+
+
+    @Override
+    public net.minecraft.world.inventory.Slot recursiveAE2$treeSlot() { return encodedPatternSlot; }
 
     @Unique
-    @GuiSync(30000)
+    private java.util.Set<String> recursiveAE2$personalDefaults = java.util.Set.of();
+    @Override public void recursiveAE2$setDefaults(java.util.Set<String> defaults) { recursiveAE2$personalDefaults = java.util.Set.copyOf(defaults); }
+    @Override public java.util.Set<String> recursiveAE2$defaults() { return recursiveAE2$personalDefaults; }
+
+    @Unique
+    @GuiSync(com.lumengrid.recursiveae2patternprovider.menu.RecursiveMenuSync.RECURSIVE_MODE)
     public boolean recursiveModeActive = Config.ENABLE.get() && Config.DEFAULT_RECURSIVE_MODE.get();
 
     @Override
@@ -38,6 +49,8 @@ public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRec
                 return;
             }
 
+            if (encodedPatternSlot != null) com.lumengrid.recursiveae2patternprovider.PatternRecipeRules.copyOrDefault(
+                    encodedPatternSlot.getItem(), encodedPattern, recursiveAE2$personalDefaults);
             PatternUtil.setRecursive(encodedPattern, Config.ENABLE.get() && this.recursiveModeActive);
 
         } catch (Exception e) {

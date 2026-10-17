@@ -189,3 +189,24 @@ idea {
         downloadJavadoc = true
     }
 }
+
+// Isolated development smoke run; never includes the harness in normal builds.
+tasks.withType(Jar).configureEach {
+    exclude '**/EditorSmoke*'
+}
+if (providers.gradleProperty('editorSmoke').isPresent()) {
+    sourceSets.main.java.srcDir 'src/smoke/java'
+    configurations.runtimeClasspath {
+        ['titanium-287342', 'athena-841890', 'geckolib-388172', 'glodium-957920',
+         'ftlibrary-404465', 'ftpessential-410811', 'rhino-416294', 'kubejs-238086'].each {
+            exclude group: 'curse.maven', module: it
+        }
+    }
+    if (providers.gradleProperty('smokeCompatJar').isPresent()) {
+        dependencies { runtimeOnly files(providers.gradleProperty('smokeCompatJar').get()) }
+    }
+    neoForge.runs.client {
+        systemProperty 'otter.editorSmoke', 'true'
+        systemProperty 'otter.smoke.output', file('../../outputs/recipe-tree-smoke').absolutePath
+    }
+}
