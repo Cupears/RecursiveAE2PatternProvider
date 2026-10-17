@@ -14,7 +14,7 @@ import java.util.*;
 
 /** Server-authored recipe alternatives with explicit per-item save/cancel. */
 public final class RecipeTreeScreen extends Screen {
-    private static final int ORANGE = 0xFFFFC98A, CARD_WIDTH = 132, CARD_HEIGHT = 82;
+    private static final int ORANGE = 0xFFFFC98A, CARD_WIDTH = 148, CARD_HEIGHT = 94;
     private final RecipeTreePackets.Open snapshot;
     private final Screen terminalScreen;
     private final net.minecraft.world.inventory.AbstractContainerMenu terminalMenu;
@@ -134,7 +134,7 @@ public final class RecipeTreeScreen extends Screen {
             screen.registerNode(id);
         }
         var old = screen.nodes.get(packet.parent());
-        screen.nodes.set(packet.parent(), new RecipeTree.Node(old.parent(), false, old.item(), "", List.of(), packet.page().note()));
+        screen.nodes.set(packet.parent(), new RecipeTree.Node(old.parent(), false, old.item(), "", List.of(), packet.page().note(), old.choice()));
         screen.offsets.put(packet.parent(), packet.page().nextOffset());
         if (packet.page().done()) screen.complete.add(packet.parent());
         else screen.loadQueue.addFirst(packet.parent());
@@ -275,6 +275,30 @@ public final class RecipeTreeScreen extends Screen {
                     getY() + (getHeight() - font.lineHeight) / 2, active ? 0xFF493729 : 0xFF857C72, false);
         }
     }
+    private void wrapped(GuiGraphicsExtractor g, Component text, int x, int y, int width, int lines, int color) {
+        var split = font.split(text, width);
+        for (int i = 0; i < Math.min(lines, split.size()); i++) {
+            var line = split.get(i);
+            if (i == lines - 1 && split.size() > lines) {
+                var plain = new StringBuilder(); line.accept((index, style, codepoint) -> { plain.appendCodePoint(codepoint); return true; });
+                g.text(font, font.plainSubstrByWidth(plain.toString(), width - font.width("...")) + "...", x, y + i * font.lineHeight, color, false);
+            } else g.text(font, line, x, y + i * font.lineHeight, color, false);
+        }
+    }
+    private Component description(int id) {
+        var node = nodes.get(id);
+        int count = groupMembers.get(head(id)).size();
+        if (node.choice() >= 0 && count > 1) return tr("ingredient_choice", count);
+        return routeDescription(id);
+    }
+    private Component routeDescription(int id) {
+        var node = nodes.get(id);
+        boolean hasRecipes = children.getOrDefault(id, List.of()).stream().anyMatch(i -> nodes.get(i).recipe());
+        boolean allDisabled = children.getOrDefault(id, List.of()).stream().filter(i -> nodes.get(i).recipe())
+                .allMatch(i -> excluded.contains(nodes.get(i).recipeId()));
+        return sharedBranches.containsKey(id) ? tr("shared") : pending.containsKey(id) || loadQueue.contains(id) ? tr("loading")
+                : id == 0 ? tr("root") : hasRecipes && allDisabled ? tr("all_disabled") : tr("note." + node.note());
+    }
     private boolean inCanvas(double x, double y) { return x >= 8 && x < width - 8 && y >= 57 && y < height - 70; }
     @Override public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float partial) {
         g.fill(0, 0, width, height, 0x3818120D);
@@ -311,10 +335,10 @@ public final class RecipeTreeScreen extends Screen {
             panel(g, box.x(), box.y(), CARD_WIDTH, CARD_HEIGHT, banned ? 0xE9BA9583 : 0xEFF3D4B1);
             g.outline(box.x(), box.y(), CARD_WIDTH, CARD_HEIGHT, head(selected) == box.id() ? 0xFFFFAA44 : 0xFFB78F65);
             if (!node.item().isEmpty()) { g.item(node.item(), box.x() + 5, box.y() + 5); g.itemDecorations(font, node.item(), box.x() + 5, box.y() + 5); }
-            g.text(font, font.plainSubstrByWidth(node.item().getHoverName().getString(), CARD_WIDTH - 28), box.x() + 24, box.y() + 8, 0xFF392B20, false);
+            wrapped(g, node.item().getHoverName(), box.x() + 24, box.y() + 4, CARD_WIDTH - 29, 2, 0xFF392B20);
             if (node.recipe()) {
                 for (int slot = 0; slot < 9; slot++) {
-                    int sx = box.x() + 5 + slot % 3 * 18, sy = box.y() + 23 + slot / 3 * 18;
+                    int sx = box.x() + 5 + slot % 3 * 18, sy = box.y() + 26 + slot / 3 * 18;
                     g.fill(sx - 1, sy - 1, sx + 16, sy + 16, 0xFF8D8173);
                     g.horizontalLine(sx - 1, sx + 16, sy - 1, 0xFF685E54);
                     g.verticalLine(sx - 1, sy - 1, sy + 16, 0xFF685E54);
@@ -322,19 +346,15 @@ public final class RecipeTreeScreen extends Screen {
                     g.verticalLine(sx + 16, sy - 1, sy + 16, 0xFFFFE9CE);
                     g.item(node.grid().get(slot), sx, sy);
                 }
-                g.text(font, tr(banned ? "disabled" : "allowed"), box.x() + 63, box.y() + 26, banned ? 0xFF863D25 : 0xFF61401E, false);
-                g.text(font, font.plainSubstrByWidth(node.recipeId(), CARD_WIDTH - 67), box.x() + 63, box.y() + 39, 0xFF574535, false);
+                g.text(font, tr(banned ? "disabled" : "allowed"), box.x() + 63, box.y() + 29, banned ? 0xFF863D25 : 0xFF61401E, false);
+                wrapped(g, Component.literal(node.recipeId()), box.x() + 63, box.y() + 42, CARD_WIDTH - 68, 2, 0xFF574535);
             } else {
-                boolean allDisabled = children.getOrDefault(actual, List.of()).stream()
-                        .filter(i -> nodes.get(i).recipe()).allMatch(i -> excluded.contains(nodes.get(i).recipeId()));
-                boolean hasRecipes = children.getOrDefault(actual, List.of()).stream().anyMatch(i -> nodes.get(i).recipe());
-                var line = sharedBranches.containsKey(actual) ? tr("shared") : pending.containsKey(actual) || loadQueue.contains(actual) ? tr("loading") : box.id() == 0 ? tr("root") : hasRecipes && allDisabled ? tr("all_disabled") : tr("note." + node.note());
-                g.textWithWordWrap(font, line, box.x() + 8, box.y() + 27, CARD_WIDTH - 16, 0xFF61401E, false);
+                wrapped(g, description(actual), box.x() + 8, box.y() + 28, CARD_WIDTH - 16, 5, 0xFF61401E);
             }
             if (children.containsKey(actual) || (!node.recipe() && box.id() != 0 && node.note() == 0 && !sharedBranches.containsKey(actual) && !complete.contains(actual))) g.text(font, expanded.contains(box.id()) ? "[-]" : "[+]", box.x() + CARD_WIDTH - 24, box.y() + CARD_HEIGHT - 12, ORANGE, false);
             var variants = groupMembers.get(box.id());
             if (variants != null && variants.size() > 1) g.text(font, "< " + (variants.indexOf(actual) + 1) + "/" + variants.size() + " >",
-                    box.x() + (node.recipe() ? 63 : 5), box.y() + (node.recipe() ? 56 : CARD_HEIGHT - 12), 0xFF61401E, false);
+                    box.x() + (node.recipe() ? 63 : 5), box.y() + (node.recipe() ? 68 : CARD_HEIGHT - 12), 0xFF61401E, false);
             if (inCanvas(mx, my) && x >= box.x() && x < box.x() + CARD_WIDTH && y >= box.y() && y < box.y() + CARD_HEIGHT) hovered = box;
         }
         g.pose().popMatrix(); g.disableScissor();
@@ -352,7 +372,9 @@ public final class RecipeTreeScreen extends Screen {
             var lines = new ArrayList<Component>();
             lines.add(node.item().getHoverName());
             if (node.recipe()) { lines.add(Component.literal(node.recipeId())); lines.add(tr("recipe_help")); lines.add(tr("variants")); }
-            else lines.add(tr("item_help"));
+            else { lines.add(description(displayed(hovered.id()))); lines.add(tr("item_help")); }
+            if (!node.recipe() && node.choice() >= 0 && groupMembers.get(hovered.id()).size() > 1)
+                lines.add(routeDescription(displayed(hovered.id())));
             if (TreePresentation.compressed(node)) lines.add(tr("compressed"));
             if (groupMembers.getOrDefault(hovered.id(), List.of()).size() > 1) lines.add(tr("group_help"));
             if (node.recipe() && personalDefaults.contains(node.recipeId())) lines.add(tr("always_hint"));
@@ -391,7 +413,7 @@ public final class RecipeTreeScreen extends Screen {
             int actual = displayed(box.id());
             var variants = groupMembers.getOrDefault(box.id(), List.of(actual));
             boolean recipeCard = nodes.get(actual).recipe();
-            boolean overTypes = recipeCard ? x >= box.x() + 63 && y >= box.y() + 52 && y < box.y() + 68
+            boolean overTypes = recipeCard ? x >= box.x() + 63 && y >= box.y() + 63 && y < box.y() + 79
                     : y >= box.y() + CARD_HEIGHT - 18 && x < box.x() + 85;
             if (variants.size() > 1 && overTypes) {
                 int direction = x < box.x() + (recipeCard ? 80 : 25) ? -1 : 1;

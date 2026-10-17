@@ -12,7 +12,7 @@ import java.util.*;
 public final class RecipeTreeSessions {
     private record Session(UUID id, net.minecraft.world.inventory.AbstractContainerMenu menu, net.minecraft.world.inventory.Slot slot, ItemStack original,
                            Set<String> shown, Set<String> excluded, long opened, List<RecipeTree.Node> nodes, RecipeTree rootTree,
-                           Map<Integer, Integer> offsets, Set<Integer> complete) {}
+                           Map<Integer, Integer> offsets, Set<Integer> complete, Map<Integer, RecipeTree.Branch> branches) {}
     private static final Map<ServerPlayer, Session> SESSIONS = new WeakHashMap<>();
     private static final Map<ServerPlayer, Long> LAST_OPEN = new WeakHashMap<>();
     private RecipeTreeSessions() {}
@@ -47,7 +47,7 @@ public final class RecipeTreeSessions {
             var tree = RecipeTree.build(details, player.level());
             var exclusions = PatternRecipeRules.read(stack);
             var session = new Session(UUID.randomUUID(), menu, slot,
-                    stack.copy(), new HashSet<>(), exclusions, now, new ArrayList<>(tree.opening().nodes()), tree, new HashMap<>(), new HashSet<>());
+                    stack.copy(), new HashSet<>(), exclusions, now, new ArrayList<>(tree.opening().nodes()), tree, new HashMap<>(), new HashSet<>(), new HashMap<>());
             SESSIONS.put(player, session);
             PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Open(session.id(), tree.opening(), exclusions));
         } catch (RuntimeException e) {
@@ -83,11 +83,12 @@ public final class RecipeTreeSessions {
         try {
             int start = session.nodes().size();
             var page = parent == 0 ? session.rootTree().rootPage(request.offset())
-                    : RecipeTree.expand(session.nodes(), parent, request.offset(), player.level());
+                    : session.branches().computeIfAbsent(parent, id -> RecipeTree.branch(session.nodes(), id, player.level()))
+                    .page(parent, start, request.offset());
             session.nodes().addAll(page.nodes());
             for (var node : page.nodes()) if (node.recipe()) session.shown().add(node.recipeId());
             session.offsets().put(parent, page.nextOffset());
-            if (page.done()) session.complete().add(parent);
+            if (page.done()) { session.complete().add(parent); session.branches().remove(parent); }
             PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Branch(session.id(), parent, start, page));
         } catch (RuntimeException e) {
             RecursiveAE2PatternProvider.LOGGER.warn("Could not expand recipe branch", e);

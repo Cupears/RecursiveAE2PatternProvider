@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.2.0-beta.8.jar` from Releases.
+1. Download `otter-patterns-1.2.0-beta.9.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
 4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.
@@ -64,7 +64,7 @@ Use the mouse wheel to zoom toward the cursor, drag the empty canvas to pan, and
 
 I save up to 128 exact recipe exclusions on the encoded pattern. They survive copying, saving, and re-encoding. This filters dependencies generated for that pattern; AE2's shared network can still use manually supplied patterns or routes offered by other recursive patterns/providers.
 
-Blocked recipe paths collapse immediately. Compressed-block routes start collapsed and remain available to expand. Color and vanilla wood types share compact cards: collapsed previews cycle, pause while hovered, and offer `<` / `>` controls to inspect each type. Grouping affects the view only; bans still target the displayed recipe ID.
+Blocked recipe paths collapse immediately. Compressed-block routes start collapsed and remain available to expand. Accepted alternatives for each ingredient share a choice card, including glass and modded tags. Separate required ingredients stay separate. Similar recipe routes also share compact cards: collapsed previews cycle, pause while hovered, and offer `<` / `>` controls to inspect each type. Grouping affects the view only; bans still target the displayed recipe ID.
 
 My personal blacklist is saved in `config/otter-patterns-recipe-defaults.json` on my client. Newly encoded recursive patterns inherit it in either supported terminal. Existing patterns retain their saved overrides when re-encoded. Removing a remembered recipe through Defaults affects future patterns; Reset rules affects the pattern being edited.
 

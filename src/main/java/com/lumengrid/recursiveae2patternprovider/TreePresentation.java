@@ -12,6 +12,7 @@ public final class TreePresentation {
             "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black");
     private static final List<String> WOODS = List.of("oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "pale_oak", "bamboo", "crimson", "warped");
     private TreePresentation() {}
+    private record IngredientChoice(int id) {}
     private record Form(String family, int count, DataComponentPatch components) {}
     private record RecipeForm(AEItemKey output, int count, List<Form> grid) {}
     public static String family(String id) {
@@ -33,11 +34,9 @@ public final class TreePresentation {
         return new Form(family(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()), stack.getCount(), stack.getComponentsPatch());
     }
     public static Object groupKey(RecipeTree.Node node) {
-        if (node.item().isEmpty() || node.note() == 2) return null;
-        if (!node.recipe()) {
-            var form = form(node.item());
-            return form.family().contains("{") ? form : null;
-        }
+        if (node.item().isEmpty()) return null;
+        if (!node.recipe()) return node.choice() >= 0 ? new IngredientChoice(node.choice()) : null;
+        if (node.note() == 2) return null;
         var grid = node.grid().stream().map(TreePresentation::form).toList();
         if (grid.stream().noneMatch(f -> f.family().contains("{"))) return null;
         return new RecipeForm(AEItemKey.of(node.item()), node.item().getCount(), grid);

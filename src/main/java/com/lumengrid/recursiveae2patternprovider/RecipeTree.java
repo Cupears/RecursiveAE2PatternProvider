@@ -3,6 +3,8 @@ package com.lumengrid.recursiveae2patternprovider;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.stacks.AEItemKey;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import java.util.*;
@@ -10,9 +12,11 @@ import java.util.*;
 /** Branches load on demand; packet size is bounded, the browsable tree is not. */
 public record RecipeTree(List<Node> nodes, boolean truncated) {
     public static final int MAX_NODES = 320; // One wire message, never the whole tree.
-    public static final int RECIPES_PER_PAGE = 24;
-    public record Node(int parent, boolean recipe, ItemStack item, String recipeId, List<ItemStack> grid, int note) {
-        public Node { grid = List.copyOf(grid); }
+    public record Node(int parent, boolean recipe, ItemStack item, String recipeId, List<ItemStack> grid, int note, int choice) {
+        public Node { grid = List.copyOf(grid); if (choice < -1) throw new IllegalArgumentException("Invalid ingredient choice"); }
+        public Node(int parent, boolean recipe, ItemStack item, String recipeId, List<ItemStack> grid, int note) {
+            this(parent, recipe, item, recipeId, grid, note, -1);
+        }
     }
     public record Page(List<Node> nodes, int nextOffset, boolean done, int note) {}
     public Set<String> recipeIds() {
@@ -38,40 +42,88 @@ public record RecipeTree(List<Node> nodes, boolean truncated) {
         var primary = pattern.getPrimaryOutput();
         ItemStack output = primary.what() instanceof AEItemKey key ? key.toStack((int)Math.min(64, primary.amount())) : ItemStack.EMPTY;
         nodes.add(new Node(-1, false, output, "", List.of(), 0));
-        Set<AEItemKey> inputs = new HashSet<>();
-        for (var input : pattern.getInputs()) for (var candidate : input.getPossibleInputs()) {
-            if (!(candidate.what() instanceof AEItemKey key) || !inputs.add(key)) continue;
-            var stack = key.toStack(displayAmount(candidate.amount(), input.getMultiplier()));
-            nodes.add(new Node(0, false, stack, "", List.of(), stack.is(output.getItem()) ? 2 : 0));
+        int choice = 0;
+        for (var input : pattern.getInputs()) {
+            Set<appeng.api.stacks.GenericStack> unique = new HashSet<>();
+            for (var candidate : input.getPossibleInputs()) {
+                if (!(candidate.what() instanceof AEItemKey key) || !unique.add(candidate)) continue;
+                var stack = key.toStack(displayAmount(candidate.amount(), input.getMultiplier()));
+                nodes.add(new Node(0, false, stack, "", List.of(), stack.is(output.getItem()) ? 2 : 0, choice));
+            }
+            choice++;
         }
         return new RecipeTree(List.copyOf(nodes), false);
     }
-    public static Page expand(List<Node> nodes, int parent, int offset, Level level) {
+    /** Relative node indices allow a recipe's large tag choices to cross packet boundaries. */
+    public static final class Branch {
+        private final List<Node> source;
+        private final List<Integer> emitted = new ArrayList<>();
+        private final int note;
+        private Branch(List<Node> source, int note) { this.source = List.copyOf(source); this.note = note; }
+        public Page page(int parent, int start, int offset) {
+            if (offset != emitted.size() || offset > source.size()) throw new IllegalArgumentException("Invalid branch offset");
+            int end = offset + Math.min(MAX_NODES, source.size() - offset);
+            var result = new ArrayList<Node>();
+            for (int i = offset; i < end; i++) {
+                var node = source.get(i);
+                int globalParent = node.parent() == -1 ? parent : emitted.get(node.parent());
+                emitted.add(start + result.size());
+                result.add(new Node(globalParent, node.recipe(), node.item(), node.recipeId(), node.grid(), node.note(), node.choice()));
+            }
+            return new Page(List.copyOf(result), end, end == source.size(), note);
+        }
+    }
+    public static Branch branch(List<Node> nodes, int parent, Level level) {
         var task = nodes.get(parent);
-        if (task.recipe() || task.note() == 2 || task.item().isEmpty()) return new Page(List.of(), offset, true, task.note());
-        var candidates = RecursivePatternGenerator.editorRecipes(level, task.item().getItem());
+        if (task.recipe() || task.note() == 2 || task.item().isEmpty()) return new Branch(List.of(), task.note());
         var added = new ArrayList<Node>();
-        int end = Math.min(candidates.size(), offset + RECIPES_PER_PAGE);
-        for (int cursor = offset; cursor < end; cursor++) {
-            var recipe = candidates.get(cursor);
+        for (var recipe : RecursivePatternGenerator.editorRecipes(level, task.item().getItem())) {
             try {
                 var result = recipe.value().assemble(net.minecraft.world.item.crafting.CraftingInput.EMPTY);
                 if (!ItemStack.isSameItemSameComponents(task.item(), result)) continue;
                 var grid = RecursivePatternGenerator.getRecipeInputsAs3x3Grid(recipe.value());
-                int recipeNode = nodes.size() + added.size();
-                added.add(new Node(parent, true, result, recipe.id().identifier().toString(), Arrays.asList(grid), 0));
-                var unique = new HashSet<Item>();
-                for (var ingredient : grid) {
-                    if (ingredient.isEmpty() || !unique.add(ingredient.getItem())) continue;
-                    boolean cycle = false;
-                    for (int ancestor = parent; ancestor >= 0; ancestor = nodes.get(ancestor).parent()) {
-                        var earlier = nodes.get(ancestor);
-                        if (!earlier.recipe() && ingredient.is(earlier.item().getItem())) { cycle = true; break; }
+                var requirements = ingredientChoices(recipe.value(), grid);
+                int recipeNode = added.size();
+                added.add(new Node(-1, true, result, recipe.id().identifier().toString(), Arrays.asList(grid), 0));
+                int choice = 0;
+                for (var requirement : requirements.entrySet()) {
+                    for (Item item : requirement.getKey()) {
+                        boolean cycle = false;
+                        for (int ancestor = parent; ancestor >= 0; ancestor = nodes.get(ancestor).parent()) {
+                            var earlier = nodes.get(ancestor);
+                            if (!earlier.recipe() && item == earlier.item().getItem()) { cycle = true; break; }
+                        }
+                        added.add(new Node(recipeNode, false, new ItemStack(item, requirement.getValue()), "", List.of(), cycle ? 2 : 0, choice));
                     }
-                    added.add(new Node(recipeNode, false, ingredient.copy(), "", List.of(), cycle ? 2 : 0));
+                    choice++;
                 }
             } catch (RuntimeException ignored) { /* Dynamic recipes have no static example to display. */ }
         }
-        return new Page(List.copyOf(added), end, end == candidates.size(), end == candidates.size() && added.isEmpty() && offset == 0 ? 1 : 0);
+        return new Branch(added, added.isEmpty() ? 1 : 0);
+    }
+    private static Map<List<Item>, Integer> ingredientChoices(CraftingRecipe recipe, ItemStack[] grid) {
+        var placement = recipe.placementInfo();
+        var ingredients = placement.ingredients();
+        Map<List<Item>, Integer> requirements = new LinkedHashMap<>();
+        for (int slot = 0; slot < 9; slot++) {
+            if (grid[slot].isEmpty()) continue;
+            int index = slot;
+            if (recipe instanceof ShapedRecipe shaped) {
+                int x = slot % 3, y = slot / 3;
+                if (x >= shaped.getWidth() || y >= shaped.getHeight()) continue;
+                index = placement.slotsToIngredientIndex().getInt(y * shaped.getWidth() + x);
+            }
+            List<Item> choices = index >= 0 && index < ingredients.size()
+                    ? ingredients.get(index).items().map(net.minecraft.core.Holder::value).distinct().toList()
+                    : List.of(grid[slot].getItem());
+            if (!choices.isEmpty()) requirements.merge(choices, 1, Integer::sum);
+        }
+        return requirements;
+    }
+    public static Page expand(List<Node> nodes, int parent, int offset, Level level) {
+        var branch = branch(nodes, parent, level);
+        // Convenience for standalone traversal; live sessions retain their Branch across pages.
+        for (int i = 0; i < offset; i++) branch.emitted.add(nodes.size() - offset + i);
+        return branch.page(parent, nodes.size(), offset);
     }
 }

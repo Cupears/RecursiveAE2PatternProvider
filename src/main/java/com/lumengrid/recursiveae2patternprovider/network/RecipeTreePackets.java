@@ -79,9 +79,10 @@ public final class RecipeTreePackets {
                     String recipeId = buf.readUtf(PatternRecipeRules.MAX_ID_LENGTH);
                     if (recipe && !PatternRecipeRules.valid(recipeId)) throw new IllegalArgumentException("Invalid recipe ID");
                     int note = bounded(buf.readVarInt(), 4);
+                    int choice = buf.readVarInt();
                     List<ItemStack> grid = new ArrayList<>();
                     if (recipe) for (int j = 0; j < 9; j++) grid.add(ItemStack.OPTIONAL_STREAM_CODEC.decode(buf));
-                    nodes.add(new RecipeTree.Node(parent, recipe, item, recipeId, grid, note));
+                    nodes.add(new RecipeTree.Node(parent, recipe, item, recipeId, grid, note, choice));
                 }
                 return new Open(id, new RecipeTree(List.copyOf(nodes), truncated), readIds(buf));
             }
@@ -93,7 +94,7 @@ public final class RecipeTreePackets {
                     buf.writeVarInt(node.parent()); buf.writeBoolean(node.recipe());
                     ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, node.item());
                     buf.writeUtf(node.recipeId(), PatternRecipeRules.MAX_ID_LENGTH);
-                    buf.writeVarInt(bounded(node.note(), 4));
+                    buf.writeVarInt(bounded(node.note(), 4)); buf.writeVarInt(node.choice());
                     if (node.recipe()) {
                         if (node.grid().size() != 9) throw new IllegalArgumentException("Invalid recipe grid");
                         for (var stack : node.grid()) ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, stack);
@@ -132,14 +133,15 @@ public final class RecipeTreePackets {
                 if (parent < 0 || start <= parent || start > Integer.MAX_VALUE - count) throw new IllegalArgumentException("Invalid branch range");
                 for (int i = 0; i < count; i++) {
                     int nodeParent = buf.readVarInt();
-                    if (nodeParent != parent && (nodeParent < start || nodeParent >= start + i)) throw new IllegalArgumentException("Invalid branch parent");
+                    if (nodeParent < 0 || nodeParent >= start + i) throw new IllegalArgumentException("Invalid branch parent");
                     boolean recipe = buf.readBoolean(); var item = ItemStack.OPTIONAL_STREAM_CODEC.decode(buf);
                     String id = buf.readUtf(PatternRecipeRules.MAX_ID_LENGTH);
                     if (recipe && !PatternRecipeRules.valid(id)) throw new IllegalArgumentException("Invalid recipe ID");
                     int nodeNote = bounded(buf.readVarInt(), 2);
+                    int choice = buf.readVarInt();
                     var grid = new ArrayList<ItemStack>();
                     if (recipe) for (int slot = 0; slot < 9; slot++) grid.add(ItemStack.OPTIONAL_STREAM_CODEC.decode(buf));
-                    nodes.add(new RecipeTree.Node(nodeParent, recipe, item, id, grid, nodeNote));
+                    nodes.add(new RecipeTree.Node(nodeParent, recipe, item, id, grid, nodeNote, choice));
                 }
                 return new Branch(session, parent, start, new RecipeTree.Page(List.copyOf(nodes), offset, done, note));
             }
@@ -149,7 +151,7 @@ public final class RecipeTreePackets {
                 buf.writeVarInt(bounded(packet.page().nodes().size(), RecipeTree.MAX_NODES));
                 for (var node : packet.page().nodes()) {
                     buf.writeVarInt(node.parent()); buf.writeBoolean(node.recipe());
-                    ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, node.item()); buf.writeUtf(node.recipeId(), PatternRecipeRules.MAX_ID_LENGTH); buf.writeVarInt(node.note());
+                    ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, node.item()); buf.writeUtf(node.recipeId(), PatternRecipeRules.MAX_ID_LENGTH); buf.writeVarInt(node.note()); buf.writeVarInt(node.choice());
                     if (node.recipe()) {
                         if (node.grid().size() != 9) throw new IllegalArgumentException("Invalid recipe grid");
                         for (var item : node.grid()) ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, item);

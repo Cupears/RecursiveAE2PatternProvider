@@ -1,4 +1,3 @@
-- Fixed opening patterns with large ingredient-choice lists.
-- Kept selected branches open when additional variants load.
-- Protected externally changed blacklist defaults and skipped unchanged writes.
-- Fixed large-count overflow and reduced tooltip rebuilding.
+- Fixed tag/glass alternatives appearing as separate required ingredients.
+- Preserved ingredient quantities and paged large nested choice groups.
+- Wrapped card text and kept full names/descriptions in tooltips.

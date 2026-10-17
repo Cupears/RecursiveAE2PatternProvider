@@ -77,5 +77,6 @@
   "gui.recursiveae2patternprovider.tree.defaults_save_error": "Pattern saved, but personal defaults could not be saved.",
   "gui.recursiveae2patternprovider.tree.always_hint": "Blacklisted by default for new recursive patterns.",
   "gui.recursiveae2patternprovider.tree.compressed": "Compressed route starts collapsed. Expand it to inspect.",
-  "gui.recursiveae2patternprovider.tree.group_help": "Grouped types. Use < / > to choose a type; collapsed previews cycle automatically."
+  "gui.recursiveae2patternprovider.tree.group_help": "Use < / > to inspect a choice. Collapsed previews cycle; only one accepted item is needed per ingredient.",
+  "gui.recursiveae2patternprovider.tree.ingredient_choice": "Choose one of %s accepted items."
 }

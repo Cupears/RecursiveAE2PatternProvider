@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0-beta.9
+
+- Show tag and substitution alternatives as one ingredient choice, preserving quantities and separate requirements.
+- Include accepted choices in nested recipes, with paging for large groups.
+- Wrap card names, descriptions and recipe IDs within their reserved space; full text stays available in tooltips.
+
 ## 1.2.0-beta.8
 
 - Paged large initial ingredient lists so patterns with hundreds of accepted inputs can open.

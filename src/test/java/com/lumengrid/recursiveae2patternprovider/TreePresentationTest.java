@@ -3,8 +3,6 @@ package com.lumengrid.recursiveae2patternprovider;
 import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.stacks.*;
 import net.minecraft.world.item.*;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.junit.jupiter.api.*;
@@ -16,20 +14,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(EphemeralTestServerProvider.class)
 class TreePresentationTest {
-    @Test void colorAndWoodGroupsRetainCountsComponentsAndRecipeShape(MinecraftServer server) {
-        assertEquals(TreePresentation.groupKey(item(Items.WHITE_WOOL)), TreePresentation.groupKey(item(Items.RED_WOOL)));
-        assertEquals(TreePresentation.groupKey(item(Items.OAK_PLANKS)), TreePresentation.groupKey(item(Items.BIRCH_PLANKS)));
-        assertNotEquals(TreePresentation.groupKey(item(Items.WHITE_WOOL)), TreePresentation.groupKey(item(Items.WHITE_CONCRETE)));
-        var named = new ItemStack(Items.RED_WOOL); named.set(DataComponents.CUSTOM_NAME, Component.literal("special"));
-        assertNotEquals(TreePresentation.groupKey(item(Items.RED_WOOL)), TreePresentation.groupKey(new RecipeTree.Node(0, false, named, "", List.of(), 0)));
+    @Test void ingredientChoicesAndRecipeVariantsKeepTheirOwnGroups(MinecraftServer server) {
+        var glass = new RecipeTree.Node(0, false, new ItemStack(Items.GLASS), "", List.of(), 0, 3);
+        var tinted = new RecipeTree.Node(0, false, new ItemStack(Items.TINTED_GLASS), "", List.of(), 0, 3);
+        assertEquals(TreePresentation.groupKey(glass), TreePresentation.groupKey(tinted));
+        var separate = new RecipeTree.Node(0, false, new ItemStack(Items.GLASS), "", List.of(), 0, 4);
+        assertNotEquals(TreePresentation.groupKey(glass), TreePresentation.groupKey(separate));
+        assertNull(TreePresentation.groupKey(item(Items.WHITE_WOOL)));
+        assertNull(TreePresentation.groupKey(item(Items.RED_WOOL)));
         var white = recipe("test:white", Items.WHITE_WOOL, Items.CHEST);
         var red = recipe("test:red", Items.RED_WOOL, Items.CHEST);
         assertEquals(TreePresentation.groupKey(white), TreePresentation.groupKey(red));
         assertNotEquals(TreePresentation.groupKey(white), TreePresentation.groupKey(recipe("test:other", Items.RED_WOOL, Items.BARREL)));
         var shifted = new ArrayList<>(red.grid()); Collections.swap(shifted, 0, 1);
         assertNotEquals(TreePresentation.groupKey(white), TreePresentation.groupKey(new RecipeTree.Node(0, true, red.item(), red.recipeId(), shifted, 0)));
-        var doubled = new ItemStack(Items.RED_WOOL, 2);
-        assertNotEquals(TreePresentation.groupKey(item(Items.WHITE_WOOL)), TreePresentation.groupKey(new RecipeTree.Node(0, false, doubled, "", List.of(), 0)));
         assertNull(TreePresentation.groupKey(recipe("test:dirt", Items.DIRT, Items.CHEST)));
     }
     @Test void compressedDetectionKeepsOrdinaryStorageBlocksOpen(MinecraftServer server) {

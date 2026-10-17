@@ -125,7 +125,7 @@ class RecipeTreeEditorTest {
                 assertEquals(tree.nodes().size(), decoded.tree().nodes().size());
                 for (int i = 0; i < tree.nodes().size(); i++) {
                     var a = tree.nodes().get(i); var b = decoded.tree().nodes().get(i);
-                    assertEquals(a.parent(), b.parent()); assertEquals(a.recipeId(), b.recipeId());
+                    assertEquals(a.parent(), b.parent()); assertEquals(a.recipeId(), b.recipeId()); assertEquals(a.choice(), b.choice());
                     assertTrue(ItemStack.matches(a.item(), b.item())); assertTrue(ItemStack.listMatches(a.grid(), b.grid()));
                 }
                 assertEquals(0, buf.readableBytes());
@@ -133,6 +133,69 @@ class RecipeTreeEditorTest {
                 RecipeTreePackets.Save.CODEC.encode(buf, save);
                 assertEquals(save, RecipeTreePackets.Save.CODEC.decode(buf));
                 assertEquals(0, buf.readableBytes());
+            } finally { buf.release(); }
+        });
+    }
+    @Test void overlappingRootChoicesRemainSeparateRequirements(MinecraftServer server) throws Exception {
+        var base = details(pattern(Items.GLASS, Items.CLOCK, Set.of()));
+        java.util.function.BiFunction<GenericStack[], Long, IPatternDetails.IInput> input = (choices, multiplier) -> new IPatternDetails.IInput() {
+            public GenericStack[] getPossibleInputs() { return choices; }
+            public long getMultiplier() { return multiplier; }
+            public boolean isValid(appeng.api.stacks.AEKey key, net.minecraft.world.level.Level level) { return true; }
+            public appeng.api.stacks.AEKey getRemainingKey(appeng.api.stacks.AEKey key) { return null; }
+        };
+        var first = input.apply(new GenericStack[]{new GenericStack(AEItemKey.of(Items.GLASS), 1), new GenericStack(AEItemKey.of(Items.TINTED_GLASS), 1)}, 2L);
+        var second = input.apply(new GenericStack[]{new GenericStack(AEItemKey.of(Items.GLASS), 1), new GenericStack(AEItemKey.of(Items.WHITE_STAINED_GLASS), 1)}, 1L);
+        IPatternDetails root = new IPatternDetails() {
+            public AEItemKey getDefinition() { return base.getDefinition(); }
+            public List<GenericStack> getOutputs() { return base.getOutputs(); }
+            public IInput[] getInputs() { return new IInput[]{first, second}; }
+        };
+        var nodes = RecipeTree.build(root, recipeLevel(server)).nodes();
+        assertEquals(5, nodes.size());
+        assertEquals(2, nodes.stream().filter(n -> n.choice() == 0).count());
+        assertEquals(2, nodes.stream().filter(n -> n.choice() == 1).count());
+        var glass = nodes.stream().filter(n -> !n.recipe() && n.item().is(Items.GLASS)).toList();
+        assertEquals(2, glass.size());
+        assertNotEquals(TreePresentation.groupKey(glass.get(0)), TreePresentation.groupKey(glass.get(1)));
+        assertEquals(2, glass.get(0).item().getCount()); assertEquals(1, glass.get(1).item().getCount());
+    }
+    @Test void nestedGlassAlternativesAreOneRequirementWithCorrectCount(MinecraftServer server) throws Exception {
+        var recipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of(
+                'G', Ingredient.of(Items.GLASS, Items.TINTED_GLASS, Items.WHITE_STAINED_GLASS), 'I', Ingredient.of(Items.IRON_INGOT)), "GGI"),
+                new ItemStackTemplate(Items.CHEST, 1));
+        var holder = new RecipeHolder<CraftingRecipe>(ResourceKey.create(Registries.RECIPE, Identifier.parse("test:glass_choices")), recipe);
+        withRecipes(server, List.of(holder), () -> {
+            var initial = RecipeTree.build(details(pattern(Items.CHEST, Items.CLOCK, Set.of())), recipeLevel(server));
+            var page = RecipeTree.expand(new ArrayList<>(initial.nodes()), 1, 0, recipeLevel(server));
+            var glass = page.nodes().stream().filter(n -> !n.recipe() && n.choice() == 0).toList();
+            assertEquals(3, glass.size()); assertTrue(glass.stream().allMatch(n -> n.item().getCount() == 2));
+            assertEquals(1, glass.stream().map(TreePresentation::groupKey).distinct().count());
+            var iron = page.nodes().stream().filter(n -> !n.recipe() && n.choice() == 1).findFirst().orElseThrow();
+            assertTrue(iron.item().is(Items.IRON_INGOT)); assertEquals(1, iron.item().getCount());
+            assertNotEquals(TreePresentation.groupKey(glass.getFirst()), TreePresentation.groupKey(iron));
+        });
+    }
+    @Test void largeNestedChoiceGroupsCanCrossPagesAndInterleave(MinecraftServer server) throws Exception {
+        var options = net.minecraft.core.registries.BuiltInRegistries.ITEM.stream().filter(i -> i != Items.AIR).limit(700).toArray(Item[]::new);
+        var recipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of('I', Ingredient.of(options)), "I"), new ItemStackTemplate(Items.NETHER_STAR, 1));
+        var holder = new RecipeHolder<CraftingRecipe>(ResourceKey.create(Registries.RECIPE, Identifier.parse("test:wide_choices")), recipe);
+        withRecipes(server, List.of(holder), () -> {
+            var initial = RecipeTree.build(details(pattern(Items.NETHER_STAR, Items.CLOCK, Set.of())), recipeLevel(server));
+            var branch = RecipeTree.branch(initial.nodes(), 1, recipeLevel(server));
+            var nodes = new ArrayList<>(initial.nodes());
+            var first = branch.page(1, nodes.size(), 0); nodes.addAll(first.nodes());
+            assertFalse(first.done());
+            int recipeId = 2;
+            nodes.add(new RecipeTree.Node(0, false, new ItemStack(Items.DIRT), "", List.of(), 0));
+            var next = branch.page(1, nodes.size(), first.nextOffset());
+            assertTrue(next.nodes().stream().allMatch(n -> n.parent() == recipeId));
+            var buf = buffer(server);
+            try {
+                RecipeTreePackets.Branch.CODEC.encode(buf, new RecipeTreePackets.Branch(UUID.randomUUID(), 1, nodes.size(), next));
+                var decoded = RecipeTreePackets.Branch.CODEC.decode(buf);
+                assertEquals(next.nodes().size(), decoded.page().nodes().size());
+                assertTrue(decoded.page().nodes().stream().allMatch(n -> n.parent() == recipeId && n.choice() == 0));
             } finally { buf.release(); }
         });
     }

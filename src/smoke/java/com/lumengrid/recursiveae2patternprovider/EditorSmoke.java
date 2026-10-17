@@ -131,7 +131,7 @@ public final class EditorSmoke {
                         var player = server.getPlayerList().getPlayers().getFirst();
                         var manager = server.getRecipeManager();
                         var recipes = new ArrayList<net.minecraft.world.item.crafting.RecipeHolder<?>>(manager.getRecipes());
-                        for (int i = 0; i < 200; i++) {
+                        for (int i = 0; i < 1000; i++) {
                             var recipe = new net.minecraft.world.item.crafting.ShapedRecipe(null, null,
                                     net.minecraft.world.item.crafting.ShapedRecipePattern.of(Map.of('I', net.minecraft.world.item.crafting.Ingredient.of(Items.DIRT)), "I"),
                                     new ItemStackTemplate(Items.OAK_PLANKS, 4));
@@ -213,7 +213,7 @@ public final class EditorSmoke {
                 focusNode(selectedVariant); next(25);
             } else if (phase == 25 && ticks - since > 10) {
                 int preview = displayNode(selectedVariant);
-                mc.screen.mouseClicked(new MouseButtonEvent(130, 127, new MouseButtonInfo(0, 0)), false);
+                mc.screen.mouseClicked(new MouseButtonEvent(130, 138, new MouseButtonInfo(0, 0)), false);
                 check(displayNode(selectedVariant) != preview, "Variant arrow did not change type");
                 int chosen = displayNode(selectedVariant);
                 mc.screen.mouseClicked(new MouseButtonEvent(40, 80, new MouseButtonInfo(0, 0)), true);
@@ -336,8 +336,41 @@ public final class EditorSmoke {
             } else if (phase == 30 && mc.screen instanceof RecipeTreeScreen && ((Set<Integer>)field("complete")).contains(0)) {
                 var nodes = (List<RecipeTree.Node>)field("nodes");
                 check(nodes.stream().filter(n -> n.parent() == 0).count() == 700, "Initial ingredient pages lost alternatives");
-                record("700 initial ingredient alternatives opened and loaded through root paging");
-                clickButton("Cancel"); finish(mc, "PASS");
+                var roots = ((Map<Integer, List<Integer>>)field("groupedChildren")).get(0);
+                check(roots.size() == 1, "Accepted root alternatives were shown as separate requirements");
+                check(((Map<Integer, List<Integer>>)field("groupMembers")).get(roots.getFirst()).size() == 700, "Root choices were lost");
+                record("700 initial alternatives loaded as ONE accepted ingredient group");
+                clickButton("Cancel"); next(32);
+            } else if (phase == 32 && ticks - since > 20) {
+                var server = mc.getSingleplayerServer(); server.execute(() -> {
+                    try {
+                        var player = server.getPlayerList().getPlayers().getFirst(); var manager = server.getRecipeManager();
+                        var recipe = new net.minecraft.world.item.crafting.ShapedRecipe(null, null,
+                                net.minecraft.world.item.crafting.ShapedRecipePattern.of(Map.of('G', net.minecraft.world.item.crafting.Ingredient.of(Items.GLASS, Items.WHITE_STAINED_GLASS, Items.TINTED_GLASS),
+                                        'I', net.minecraft.world.item.crafting.Ingredient.of(Items.IRON_INGOT)), "GGI"), new ItemStackTemplate(Items.CHEST, 1));
+                        var holder = new net.minecraft.world.item.crafting.RecipeHolder<net.minecraft.world.item.crafting.CraftingRecipe>(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.RECIPE,
+                                net.minecraft.resources.Identifier.parse("smoke:glass_choices")), recipe);
+                        var recipes = new ArrayList<net.minecraft.world.item.crafting.RecipeHolder<?>>(manager.getRecipes()); recipes.add(holder);
+                        var field = manager.getClass().getDeclaredField("recipes"); field.setAccessible(true); field.set(manager, net.minecraft.world.item.crafting.RecipeMap.create(recipes));
+                        ItemStack[] input = new ItemStack[9]; Arrays.fill(input, ItemStack.EMPTY);
+                        input[0] = new ItemStack(Items.GLASS); input[1] = new ItemStack(Items.GLASS); input[2] = new ItemStack(Items.IRON_INGOT);
+                        var pattern = PatternDetailsHelper.encodeCraftingPattern(holder, input, new ItemStack(Items.CHEST), true, false); PatternUtil.setRecursive(pattern, true);
+                        ((com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu)player.containerMenu).recursiveAE2$treeSlot().set(pattern); player.containerMenu.broadcastChanges();
+                    } catch (Throwable e) { serverFailure = e; }
+                }); next(33);
+            } else if (phase == 33 && ticks - since > 30) {
+                clickTreeButton(); next(34);
+            } else if (phase == 34 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
+                var roots = ((Map<Integer, List<Integer>>)field("groupedChildren")).get(0);
+                check(roots.size() == 2, "Glass alternatives were shown as three separate requirements");
+                var groups = (Map<Integer, List<Integer>>)field("groupMembers");
+                int glass = roots.stream().filter(id -> groups.get(id).size() == 3).findFirst().orElseThrow();
+                var nodes = (List<RecipeTree.Node>)field("nodes");
+                check(groups.get(glass).stream().allMatch(id -> nodes.get(id).item().getCount() == 2), "Glass quantity was not preserved");
+                record("Glass choices displayed as one ingredient requiring two items, plus one iron requirement");
+                next(35);
+            } else if (phase == 35 && ticks - since > 10) {
+                shot("recipe-tree-glass-choices"); clickButton("Cancel"); finish(mc, "PASS");
             }
         } catch (Throwable e) {
             try { finish(mc, "FAIL phase " + phase + ": " + e); }
