@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0-beta.11
+
+- Redesigned the personal blacklist with searchable rows, item previews, and full recipe-ID tooltips.
+- Added dedicated remove buttons, a scrollbar, recipe counts, and a Done button.
+- Kept blacklist controls separate from tree clicks and zoom shortcuts.
+
 ## 1.2.0-beta.10
 
 - Prefer accepted FTB Materials replacements over obsolete ingredient duplicates.

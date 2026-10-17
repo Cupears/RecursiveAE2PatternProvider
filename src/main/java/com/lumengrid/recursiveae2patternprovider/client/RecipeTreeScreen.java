@@ -5,6 +5,8 @@ import com.lumengrid.recursiveae2patternprovider.network.RecipeTreePackets;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.KeyEvent;
@@ -19,6 +21,7 @@ public final class RecipeTreeScreen extends Screen {
     private final Screen terminalScreen;
     private final net.minecraft.world.inventory.AbstractContainerMenu terminalMenu;
     private final Map<appeng.api.stacks.AEItemKey, Integer> firstBranch = new HashMap<>();
+    private final Map<String, net.minecraft.world.item.ItemStack> recipeExamples = new HashMap<>();
     private final Map<Integer, Integer> sharedBranches = new HashMap<>();
     private final ArrayDeque<Integer> loadQueue = new ArrayDeque<>();
     private boolean layoutDirty = true, centerOnRoot = true;
@@ -27,6 +30,10 @@ public final class RecipeTreeScreen extends Screen {
     private final Set<String> personalDefaults = new HashSet<>();
     private boolean defaultsWritable = true, managingDefaults;
     private int defaultsScroll;
+    private final List<AbstractWidget> defaultsWidgets = new ArrayList<>();
+    private final List<Button> defaultRemoveButtons = new ArrayList<>();
+    private EditBox defaultsSearch;
+    private boolean defaultsDragging;
     private final Map<Integer, Integer> groupHeads = new HashMap<>();
     private final Map<Integer, List<Integer>> groupMembers = new HashMap<>();
     private final Map<Integer, Map<Object, Integer>> siblingGroups = new HashMap<>();
@@ -69,6 +76,7 @@ public final class RecipeTreeScreen extends Screen {
     }
     private void registerNode(int id) {
         var node = nodes.get(id);
+        if (node.recipe()) recipeExamples.putIfAbsent(node.recipeId(), node.item());
         Object key = TreePresentation.groupKey(node);
         var siblings = siblingGroups.computeIfAbsent(node.parent(), ignored -> new HashMap<>());
         Integer existing = key == null ? null : siblings.get(key);
@@ -138,6 +146,7 @@ public final class RecipeTreeScreen extends Screen {
         screen.offsets.put(packet.parent(), packet.page().nextOffset());
         if (packet.page().done()) screen.complete.add(packet.parent());
         else screen.loadQueue.addFirst(packet.parent());
+        if (screen.managingDefaults) screen.rebuildDefaultRows();
     }
     private static Component tr(String key, Object... args) {
         return Component.translatable("gui.recursiveae2patternprovider.tree." + key, args);
@@ -174,7 +183,8 @@ public final class RecipeTreeScreen extends Screen {
                 .bounds(8, height - 27, w, 20).build(MenuButton::new));
         alwaysButton = addRenderableWidget(Button.builder(tr("always"), b -> toggleAlways())
                 .bounds(12 + w, height - 27, w, 20).build(MenuButton::new));
-        defaultsButton = addRenderableWidget(Button.builder(tr("defaults", personalDefaults.size()), b -> { managingDefaults = true; defaultsScroll = 0; })
+        defaultsWidgets.clear(); defaultRemoveButtons.clear();
+        defaultsButton = addRenderableWidget(Button.builder(tr("defaults", personalDefaults.size()), b -> openDefaults())
                 .bounds(width - 112, 10, 100, 20).build(MenuButton::new));
         defaultsButton.active = defaultsWritable && !waiting;
         addRenderableWidget(Button.builder(tr("reset_rules"), b -> { if (!waiting) { excluded.clear(); updateButtons(); } })
@@ -187,6 +197,7 @@ public final class RecipeTreeScreen extends Screen {
                 .bounds(28 + w * 5, height - 27, w, 20).build(MenuButton::new));
         saveButton.active = !waiting && !invalidSession;
         updateButtons();
+        if (managingDefaults) openDefaults();
     }
     private void updateButtons() {
         cancelButton.active = !waiting;
@@ -262,13 +273,14 @@ public final class RecipeTreeScreen extends Screen {
     }
     private static final class MenuButton extends Button {
         private Component tooltipMessage;
+        private boolean automaticTooltip = true;
         private MenuButton(Button.Builder builder) { super(builder); }
         @Override protected void extractContents(GuiGraphicsExtractor g, int mx, int my, float partial) {
             int fill = !active ? 0xFFC1B7AA : isHoveredOrFocused() ? 0xFFFFD59F : 0xFFE9C398;
             panel(g, getX(), getY(), getWidth(), getHeight(), fill);
             var font = Minecraft.getInstance().font;
             String label = font.plainSubstrByWidth(getMessage().getString(), Math.max(1, getWidth() - 6));
-            if (!getMessage().equals(tooltipMessage)) {
+            if (automaticTooltip && !getMessage().equals(tooltipMessage)) {
                 tooltipMessage = getMessage(); setTooltip(net.minecraft.client.gui.components.Tooltip.create(tooltipMessage));
             }
             g.text(font, label, getX() + (getWidth() - font.width(label)) / 2,
@@ -360,8 +372,8 @@ public final class RecipeTreeScreen extends Screen {
         g.pose().popMatrix(); g.disableScissor();
         g.text(font, tr("count", excluded.size(), snapshot.excluded().size()), 12, height - 61, 0xFF493729, false);
         g.textWithWordWrap(font, status.getString().isEmpty() ? tr("help") : status, 12, height - 46, width - 24, 0xFF493729, false);
+        if (managingDefaults) { hoveredHead = -1; renderDefaults(g, mx, my); super.extractRenderState(g, mx, my, partial); return; }
         super.extractRenderState(g, mx, my, partial);
-        if (managingDefaults) { hoveredHead = -1; renderDefaults(g); return; }
         if (hovered == null) hoveredHead = -1;
         else {
             int shown = displayed(hovered.id());
@@ -381,32 +393,103 @@ public final class RecipeTreeScreen extends Screen {
             g.setComponentTooltipForNextFrame(font, lines, mx, my);
         }
     }
-    private int defaultsWidth() { return Math.min(420, width - 32); }
-    private int defaultsHeight() { return Math.min(260, height - 32); }
-    private int defaultsRows() { return Math.max(1, (defaultsHeight() - 70) / 16); }
-    private void renderDefaults(GuiGraphicsExtractor g) {
-        int w = defaultsWidth(), h = defaultsHeight(), x = (width - w) / 2, y = (height - h) / 2;
-        g.fill(0, 0, width, height, 0x88000000); panel(g, x, y, w, h, 0xFFF3D4B1);
-        g.text(font, tr("defaults_title"), x + 8, y + 8, 0xFF493729, false);
-        g.textWithWordWrap(font, tr("defaults_help"), x + 8, y + 24, w - 16, 0xFF493729, false);
-        var ids = new ArrayList<>(new TreeSet<>(personalDefaults));
-        defaultsScroll = Math.clamp(defaultsScroll, 0, Math.max(0, ids.size() - defaultsRows()));
-        for (int row = 0; row < defaultsRows() && row + defaultsScroll < ids.size(); row++)
-            g.text(font, font.plainSubstrByWidth(ids.get(row + defaultsScroll), w - 32) + "  x", x + 8, y + 48 + row * 16, 0xFF61401E, false);
-        if (ids.isEmpty()) g.text(font, tr("defaults_empty"), x + 8, y + 48, 0xFF61401E, false);
-        g.text(font, tr("defaults_done"), x + 8, y + h - 16, 0xFF493729, false);
+    private int defaultsWidth() { return Math.min(460, width - 24); }
+    private int defaultsHeight() { return Math.min(310, height - 24); }
+    private int defaultsRows() { return Math.max(1, (defaultsHeight() - 110) / 26); }
+    private int defaultsX() { return (width - defaultsWidth()) / 2; }
+    private int defaultsY() { return (height - defaultsHeight()) / 2; }
+    private net.minecraft.world.item.ItemStack defaultItem(String id) {
+        return recipeExamples.getOrDefault(id, net.minecraft.world.item.ItemStack.EMPTY);
     }
-    private void clickDefaults(double mx, double my) {
-        int w = defaultsWidth(), h = defaultsHeight(), x = (width - w) / 2, y = (height - h) / 2;
-        if (mx < x || mx >= x + w || my < y || my >= y + h || my >= y + h - 22) { managingDefaults = false; return; }
-        int row = ((int)my - y - 48) / 16;
-        var ids = new ArrayList<>(new TreeSet<>(personalDefaults));
-        if (my >= y + 48 && row >= 0 && row < defaultsRows() && row + defaultsScroll < ids.size()) {
-            personalDefaults.remove(ids.get(row + defaultsScroll)); updateButtons();
+    private String defaultName(String id) {
+        var item = defaultItem(id);
+        return item.isEmpty() ? id.substring(id.indexOf(':') + 1).replace('_', ' ').replace('/', ' ') : item.getHoverName().getString();
+    }
+    private List<String> filteredDefaults() {
+        String query = defaultsSearch == null ? "" : defaultsSearch.getValue().strip().toLowerCase(Locale.ROOT);
+        return personalDefaults.stream().sorted().filter(id -> id.toLowerCase(Locale.ROOT).contains(query)
+                || defaultName(id).toLowerCase(Locale.ROOT).contains(query)).toList();
+    }
+    private void openDefaults() {
+        managingDefaults = true; dragging = false; defaultsScroll = 0;
+        children().stream().filter(w -> w instanceof AbstractWidget).forEach(w -> ((AbstractWidget)w).visible = false);
+        int x = defaultsX(), y = defaultsY(), w = defaultsWidth();
+        defaultsSearch = new EditBox(font, x + 58, y + 43, w - 68, 18, tr("defaults_search"));
+        defaultsSearch.setMaxLength(256); defaultsSearch.setHint(tr("defaults_search"));
+        defaultsSearch.setResponder(value -> { defaultsScroll = 0; rebuildDefaultRows(); });
+        defaultsWidgets.add(addRenderableWidget(defaultsSearch));
+        var done = Button.builder(tr("defaults_done"), b -> closeDefaults())
+                .bounds(x + w - 90, y + defaultsHeight() - 28, 80, 20).build(MenuButton::new);
+        defaultsWidgets.add(addRenderableWidget(done));
+        rebuildDefaultRows(); setFocused(defaultsSearch);
+    }
+    private void closeDefaults() {
+        managingDefaults = false; defaultsDragging = false; setFocused(null);
+        for (var widget : defaultsWidgets) removeWidget(widget);
+        defaultsWidgets.clear(); defaultRemoveButtons.clear(); defaultsSearch = null;
+        children().stream().filter(w -> w instanceof AbstractWidget).forEach(w -> ((AbstractWidget)w).visible = true);
+        updateButtons();
+    }
+    private void rebuildDefaultRows() {
+        for (var button : defaultRemoveButtons) { removeWidget(button); defaultsWidgets.remove(button); }
+        defaultRemoveButtons.clear();
+        var ids = filteredDefaults();
+        defaultsScroll = Math.clamp(defaultsScroll, 0, Math.max(0, ids.size() - defaultsRows()));
+        for (int row = 0; row < defaultsRows() && row + defaultsScroll < ids.size(); row++) {
+            String id = ids.get(row + defaultsScroll);
+            var button = Button.builder(Component.literal("x"), b -> {
+                personalDefaults.remove(id); updateButtons(); rebuildDefaultRows();
+            }).bounds(defaultsX() + defaultsWidth() - 40, defaultsY() + 70 + row * 26 + 3, 18, 18).build(MenuButton::new);
+            button.setTooltip(net.minecraft.client.gui.components.Tooltip.create(tr("defaults_remove", id)));
+            ((MenuButton)button).automaticTooltip = false;
+            defaultsWidgets.add(addRenderableWidget(button)); defaultRemoveButtons.add(button);
         }
     }
+    private String shortened(String value, int width) {
+        return font.width(value) <= width ? value : font.plainSubstrByWidth(value, Math.max(0, width - font.width("..."))) + "...";
+    }
+    private void renderDefaults(GuiGraphicsExtractor g, int mx, int my) {
+        int w = defaultsWidth(), h = defaultsHeight(), x = (width - w) / 2, y = (height - h) / 2;
+        g.fill(0, 0, width, height, 0xA018120D); panel(g, x, y, w, h, 0xFFF0D7BA);
+        g.fill(x + 1, y + 1, x + w - 1, y + 3, 0xFFFFAA44);
+        g.text(font, tr("defaults_title"), x + 10, y + 10, 0xFF392B20, false);
+        g.text(font, shortened(tr("defaults_help").getString(), w - 20), x + 10, y + 26, 0xFF614B35, false);
+        g.text(font, tr("defaults_search_label"), x + 10, y + 48, 0xFF614B35, false);
+        int listY = y + 70, listHeight = defaultsRows() * 26;
+        g.fill(x + 9, listY - 1, x + w - 9, listY + listHeight, 0xFFB69D81);
+        var ids = filteredDefaults();
+        for (int row = 0; row < defaultsRows() && row + defaultsScroll < ids.size(); row++) {
+            String id = ids.get(row + defaultsScroll); int rowY = listY + row * 26;
+            boolean hover = mx >= x + 10 && mx < x + w - 44 && my >= rowY && my < rowY + 25;
+            g.fill(x + 10, rowY, x + w - 20, rowY + 25, hover ? 0xFFFFE4C3 : row % 2 == 0 ? 0xFFF9E8D2 : 0xFFF3DFC4);
+            var item = defaultItem(id); int labelX = x + (item.isEmpty() ? 16 : 34);
+            if (!item.isEmpty()) g.item(item, x + 14, rowY + 4);
+            g.text(font, shortened(defaultName(id), x + w - 46 - labelX), labelX, rowY + 4, 0xFF392B20, false);
+            g.text(font, shortened(id, x + w - 46 - labelX), labelX, rowY + 14, 0xFF78614B, false);
+            if (hover) g.setComponentTooltipForNextFrame(font, List.of(Component.literal(defaultName(id)), Component.literal(id)), mx, my);
+        }
+        if (ids.isEmpty()) g.textWithWordWrap(font, tr(personalDefaults.isEmpty() ? "defaults_empty" : "defaults_no_results"), x + 18, listY + 12, w - 40, 0xFF61401E, false);
+        int end = Math.min(ids.size(), defaultsScroll + defaultsRows());
+        g.text(font, tr("defaults_count", ids.isEmpty() ? 0 : defaultsScroll + 1, end, ids.size()), x + 10, y + h - 21, 0xFF614B35, false);
+        if (ids.size() > defaultsRows()) {
+            int thumb = Math.max(12, listHeight * defaultsRows() / ids.size());
+            int top = listY + (listHeight - thumb) * defaultsScroll / (ids.size() - defaultsRows());
+            panel(g, x + w - 17, top, 6, thumb, 0xFFFFBA6C);
+        }
+    }
+    private void dragDefaults(double my) {
+        int max = Math.max(0, filteredDefaults().size() - defaultsRows());
+        defaultsScroll = (int)Math.round(Math.clamp((my - defaultsY() - 70) / (defaultsRows() * 26.0), 0, 1) * max);
+        rebuildDefaultRows();
+    }
     @Override public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (managingDefaults) { clickDefaults(event.x(), event.y()); return true; }
+        if (managingDefaults) {
+            if (event.button() == 0 && event.x() >= defaultsX() + defaultsWidth() - 19 && event.x() < defaultsX() + defaultsWidth() - 9
+                    && event.y() >= defaultsY() + 70 && event.y() < defaultsY() + 70 + defaultsRows() * 26) {
+                defaultsDragging = true; dragDefaults(event.y()); return true;
+            }
+            super.mouseClicked(event, doubleClick); return true;
+        }
         if (!inCanvas(event.x(), event.y())) return super.mouseClicked(event, doubleClick);
         double x = (event.x() - panX) / zoom, y = (event.y() - 57 - panY) / zoom;
         for (var box : boxes) if (x >= box.x() && x < box.x() + CARD_WIDTH && y >= box.y() && y < box.y() + CARD_HEIGHT) {
@@ -445,13 +528,14 @@ public final class RecipeTreeScreen extends Screen {
         dragging = event.button() == 0; return true;
     }
     @Override public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+        if (managingDefaults) { if (defaultsDragging) dragDefaults(event.y()); else super.mouseDragged(event, dx, dy); return true; }
         if (dragging) { panX += dx; panY += dy; return true; }
         return super.mouseDragged(event, dx, dy);
     }
-    @Override public boolean mouseReleased(MouseButtonEvent event) { dragging = false; return super.mouseReleased(event); }
+    @Override public boolean mouseReleased(MouseButtonEvent event) { dragging = false; defaultsDragging = false; return super.mouseReleased(event); }
     @Override public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
         if (managingDefaults) {
-            defaultsScroll = Math.clamp(defaultsScroll - (int)Math.signum(vertical), 0, Math.max(0, personalDefaults.size() - defaultsRows())); return true;
+            defaultsScroll -= (int)Math.signum(vertical) * 3; rebuildDefaultRows(); return true;
         }
         if (!inCanvas(x, y)) return super.mouseScrolled(x, y, horizontal, vertical);
         var view = TreePresentation.zoomAt(zoom, panX, panY, x, y - 57, vertical);
@@ -459,7 +543,7 @@ public final class RecipeTreeScreen extends Screen {
         panX += horizontal * 40; return true;
     }
     @Override public boolean keyPressed(KeyEvent event) {
-        if (managingDefaults) { if (event.isEscape()) managingDefaults = false; return true; }
+        if (managingDefaults) { if (event.isEscape()) closeDefaults(); else super.keyPressed(event); return true; }
         if (event.key() == 61 || event.key() == 334) { zoom = Math.min(1.5, zoom + .1); return true; }
         if (event.key() == 45 || event.key() == 333) { zoom = Math.max(.15, zoom - .1); return true; }
         if (event.key() == 32 && selected >= 0 && nodes.get(selected).recipe()) { toggleSelected(); return true; }

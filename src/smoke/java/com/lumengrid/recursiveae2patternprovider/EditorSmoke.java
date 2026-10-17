@@ -370,7 +370,36 @@ public final class EditorSmoke {
                 record("Glass choices displayed as one ingredient requiring two items, plus one iron requirement");
                 next(35);
             } else if (phase == 35 && ticks - since > 10) {
-                shot("recipe-tree-glass-choices"); clickButton("Cancel"); finish(mc, "PASS");
+                shot("recipe-tree-glass-choices");
+                var defaults = (Set<String>)field("personalDefaults");
+                defaults.add("smoke:glass_choices");
+                for (int i = 0; i < 24; i++) defaults.add("example:processing/very_long_recipe_name_for_copper_ingots_" + i);
+                var update = RecipeTreeScreen.class.getDeclaredMethod("updateButtons"); update.setAccessible(true); update.invoke(mc.screen);
+                clickButton("Defaults: 25"); next(36);
+            } else if (phase == 36 && ticks - since > 10) {
+                shot("recipe-blacklist-list");
+                var search = (net.minecraft.client.gui.components.EditBox)field("defaultsSearch");
+                search.setValue("glass"); check(((List<?>)field("defaultRemoveButtons")).size() == 1, "Blacklist search did not filter rows");
+                next(37);
+            } else if (phase == 37 && ticks - since > 10) {
+                shot("recipe-blacklist-search");
+                int count = ((Set<?>)field("personalDefaults")).size();
+                int w = Math.min(460, mc.screen.width - 24), h = Math.min(310, mc.screen.height - 24);
+                int x = (mc.screen.width - w) / 2, y = (mc.screen.height - h) / 2;
+                mc.screen.mouseClicked(new MouseButtonEvent(x + 30, y + 80, new MouseButtonInfo(0, 0)), false);
+                check(((Set<?>)field("personalDefaults")).size() == count, "Clicking a row removed a recipe");
+                clickButton("x"); check(!((Set<?>)field("personalDefaults")).contains("smoke:glass_choices"), "Remove button removed wrong default");
+                var search = (net.minecraft.client.gui.components.EditBox)field("defaultsSearch");
+                search.setValue("not_a_matching_recipe"); check(((List<?>)field("defaultRemoveButtons")).isEmpty(), "Empty search retained remove buttons");
+                search.setValue(""); mc.screen.mouseScrolled(x + 30, y + 80, 0, -1);
+                check((int)field("defaultsScroll") > 0, "Blacklist wheel did not scroll");
+                var viewZoom = field("zoom"); mc.screen.keyPressed(new net.minecraft.client.input.KeyEvent(61, 0, 0));
+                check(viewZoom.equals(field("zoom")), "Typing in blacklist changed tree zoom");
+                mc.screen.keyPressed(new net.minecraft.client.input.KeyEvent(256, 0, 0));
+                check(!(boolean)field("managingDefaults"), "Escape did not close blacklist");
+                check(mc.screen.children().stream().filter(wi -> wi instanceof Button b && b.getMessage().getString().equals("Save")).allMatch(wi -> ((Button)wi).visible), "Tree buttons stayed hidden");
+                record("Blacklist search, explicit remove buttons, scrolling, Escape and modal input isolation passed");
+                clickButton("Cancel"); finish(mc, "PASS");
             }
         } catch (Throwable e) {
             try { finish(mc, "FAIL phase " + phase + ": " + e); }
@@ -415,9 +444,7 @@ public final class EditorSmoke {
     }
     private static void removeDefaultInManager() {
         var mc = Minecraft.getInstance(); clickButton("Defaults: 1");
-        int w = Math.min(420, mc.screen.width - 32), h = Math.min(260, mc.screen.height - 32);
-        mc.screen.mouseClicked(new MouseButtonEvent((mc.screen.width - w) / 2 + 12, (mc.screen.height - h) / 2 + 52, new MouseButtonInfo(0, 0)), false);
-        mc.screen.keyPressed(new net.minecraft.client.input.KeyEvent(256, 0, 0));
+        clickButton("x"); clickButton("Done");
     }
     private static void shiftClickSelected() { Minecraft.getInstance().screen.mouseClicked(new MouseButtonEvent(40, 80, new MouseButtonInfo(0, 1)), false); }
     private static void requestTerminal(Minecraft mc) {

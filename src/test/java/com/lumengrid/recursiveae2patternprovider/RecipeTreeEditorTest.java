@@ -24,6 +24,38 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(EphemeralTestServerProvider.class)
 class RecipeTreeEditorTest {
+    @Test void nativeWoolTagChoicesStayGroupedAcrossPrimaryAndNetworkChanges(MinecraftServer server) throws Exception {
+        var wool = Ingredient.of(net.minecraft.core.registries.BuiltInRegistries.ITEM.getOrThrow(net.minecraft.tags.ItemTags.WOOL));
+        int accepted = (int)wool.items().count(); assertTrue(accepted > 1);
+        var recipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of('W', wool), "WW"), new ItemStackTemplate(Items.CHEST));
+        var holder = new RecipeHolder<CraftingRecipe>(ResourceKey.create(Registries.RECIPE, Identifier.parse("test:wool_choices")), recipe);
+        withRecipes(server, List.of(holder), () -> {
+            var level = recipeLevel(server);
+            Set<Item> previous = null;
+            for (var primary : List.of(Items.RED_WOOL, Items.WHITE_WOOL)) {
+                var input = new ItemStack[9]; Arrays.fill(input, ItemStack.EMPTY);
+                input[0] = new ItemStack(primary); input[1] = new ItemStack(primary);
+                var encoded = PatternDetailsHelper.encodeCraftingPattern(holder, input, new ItemStack(Items.CHEST), true, false);
+                PatternUtil.setRecursive(encoded, true);
+                var root = new appeng.crafting.pattern.AECraftingPattern(AEItemKey.of(encoded), level);
+                var tree = RecipeTree.build(root, level);
+                var choices = tree.nodes().subList(1, tree.nodes().size());
+                assertEquals(accepted, choices.size());
+                assertEquals(1, choices.stream().map(TreePresentation::groupKey).distinct().count());
+                assertTrue(choices.stream().allMatch(n -> n.item().getCount() == 2));
+                var items = choices.stream().map(n -> n.item().getItem()).collect(java.util.stream.Collectors.toSet());
+                if (previous != null) assertEquals(previous, items); previous = items;
+                var manual = details(pattern(Items.STRING, Items.WHITE_WOOL, Set.of()));
+                RecursivePatternGenerator.generate(List.of(root, manual), level, -1);
+                assertEquals(items, RecipeTree.build(root, level).nodes().stream().skip(1).map(n -> n.item().getItem()).collect(java.util.stream.Collectors.toSet()));
+                RecursivePatternGenerator.generate(List.of(root), level, -1);
+                assertEquals(accepted + 1, RecipeTree.build(root, level).nodes().size());
+                var exactEncoded = PatternDetailsHelper.encodeCraftingPattern(holder, input, new ItemStack(Items.CHEST), false, false);
+                var exact = RecipeTree.build(new appeng.crafting.pattern.AECraftingPattern(AEItemKey.of(exactEncoded), level), level);
+                assertEquals(2, exact.nodes().size()); assertTrue(exact.nodes().get(1).item().is(primary));
+            }
+        });
+    }
     @Test void hiddenTagChoicesAreFilteredInTreeGridAndGeneratedVariants(MinecraftServer server) throws Exception {
         var holder = net.minecraft.core.registries.BuiltInRegistries.ITEM.wrapAsHolder(Items.GLASS);
         var previousTags = holder.tags().toList();
