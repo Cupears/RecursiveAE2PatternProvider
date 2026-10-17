@@ -23,6 +23,11 @@ public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRec
     public net.minecraft.world.inventory.Slot recursiveAE2$treeSlot() { return encodedPatternSlot; }
 
     @Unique
+    private java.util.Set<String> recursiveAE2$personalDefaults = java.util.Set.of();
+    @Override public void recursiveAE2$setDefaults(java.util.Set<String> defaults) { recursiveAE2$personalDefaults = java.util.Set.copyOf(defaults); }
+    @Override public java.util.Set<String> recursiveAE2$defaults() { return recursiveAE2$personalDefaults; }
+
+    @Unique
     @GuiSync(com.lumengrid.recursiveae2patternprovider.menu.RecursiveMenuSync.RECURSIVE_MODE)
     public boolean recursiveModeActive = Config.ENABLE.get() && Config.DEFAULT_RECURSIVE_MODE.get();
 
@@ -44,8 +49,8 @@ public abstract class WirelessComprehensiveWorkTerminalMenuMixin implements IRec
                 return;
             }
 
-            if (encodedPatternSlot != null) com.lumengrid.recursiveae2patternprovider.PatternRecipeRules.copy(
-                    encodedPatternSlot.getItem(), encodedPattern);
+            if (encodedPatternSlot != null) com.lumengrid.recursiveae2patternprovider.PatternRecipeRules.copyOrDefault(
+                    encodedPatternSlot.getItem(), encodedPattern, recursiveAE2$personalDefaults);
             PatternUtil.setRecursive(encodedPattern, Config.ENABLE.get() && this.recursiveModeActive);
 
         } catch (Exception e) {

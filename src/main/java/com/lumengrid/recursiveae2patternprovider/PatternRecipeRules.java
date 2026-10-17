@@ -44,6 +44,10 @@ public final class PatternRecipeRules {
         write(newPattern, read(oldPattern));
     }
 
+    public static void copyOrDefault(ItemStack oldPattern, ItemStack newPattern, Set<String> defaults) {
+        write(newPattern, oldPattern.isEmpty() ? defaults : read(oldPattern));
+    }
+
     /** Changes may only affect IDs shown by the server or already saved on the item. */
     public static boolean maySave(Set<String> proposed, Set<String> original, Set<String> shown) {
         return proposed.size() <= MAX_EXCLUSIONS && proposed.stream().allMatch(id -> valid(id)

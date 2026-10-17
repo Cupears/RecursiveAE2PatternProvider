@@ -35,6 +35,22 @@ public final class RecipeTreePackets {
             buf.writeUtf(id, PatternRecipeRules.MAX_ID_LENGTH);
         }
     }
+    public record Defaults(int containerId, Set<String> excluded) implements CustomPacketPayload {
+        public static final Type<Defaults> TYPE = RecipeTreePackets.type("recipe_defaults");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Defaults> CODEC = new StreamCodec<>() {
+            public Defaults decode(RegistryFriendlyByteBuf buf) { return new Defaults(buf.readVarInt(), readIds(buf)); }
+            public void encode(RegistryFriendlyByteBuf buf, Defaults packet) { buf.writeVarInt(packet.containerId()); writeIds(buf, packet.excluded()); }
+        };
+        public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        public static void handle(Defaults packet, IPayloadContext ctx) {
+            ctx.enqueueWork(() -> {
+                if (ctx.player() instanceof ServerPlayer player && player.containerMenu.containerId == packet.containerId()
+                        && player.containerMenu.stillValid(player)
+                        && player.containerMenu instanceof com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu menu)
+                    menu.recursiveAE2$setDefaults(packet.excluded());
+            });
+        }
+    }
     public record RequestOpen(int containerId) implements CustomPacketPayload {
         public static final Type<RequestOpen> TYPE = RecipeTreePackets.type("recipe_tree_request");
         public static final StreamCodec<RegistryFriendlyByteBuf, RequestOpen> CODEC = new StreamCodec<>() {

@@ -1,1 +1,1 @@
-Restored the left-to-right recipe-tree layout, with the main item at the upper left and dependencies extending to the right.
+Added mouse-wheel zoom, a personal recipe blacklist for new patterns, and a panel to manage remembered recipes. Blocked routes collapse immediately, compressed routes start collapsed, and color/wood types share compact cards with cycling previews and type controls.

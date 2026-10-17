@@ -76,6 +76,7 @@ public final class EditorSmoke {
             if (serverFailure != null) throw new IllegalStateException("Server action failed", serverFailure);
             if ((System.nanoTime() - start) / 1e9 > 300) throw new IllegalStateException("Smoke timeout at phase " + phase + ", screen " + mc.screen);
             if (phase == 0 && ticks > 60 && mc.getOverlay() == null) {
+                RecipeDefaults.save(com.lumengrid.recursiveae2patternprovider.client.ClientRecipeDefaults.path(), Set.of());
                 mc.options.guiScale().set(2);
                 mc.getWindow().setWindowed(1280, 720);
                 mc.options.renderDistance().set(3); mc.options.simulationDistance().set(5);
@@ -137,6 +138,13 @@ public final class EditorSmoke {
                             recipes.add(new net.minecraft.world.item.crafting.RecipeHolder<>(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.RECIPE,
                                     net.minecraft.resources.Identifier.parse("smoke:planks_" + i)), recipe));
                         }
+                        for (var entry : Map.of("white_variant", Items.WHITE_WOOL, "red_variant", Items.RED_WOOL, "compressed_planks", Items.DIRT).entrySet()) {
+                            var recipe = new net.minecraft.world.item.crafting.ShapedRecipe(null, null,
+                                    net.minecraft.world.item.crafting.ShapedRecipePattern.of(Map.of('I', net.minecraft.world.item.crafting.Ingredient.of(entry.getValue())), "I"),
+                                    new ItemStackTemplate(Items.OAK_PLANKS, 4));
+                            recipes.add(new net.minecraft.world.item.crafting.RecipeHolder<>(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.RECIPE,
+                                    net.minecraft.resources.Identifier.parse("smoke:" + entry.getKey())), recipe));
+                        }
                         var field = manager.getClass().getDeclaredField("recipes"); field.setAccessible(true);
                         field.set(manager, net.minecraft.world.item.crafting.RecipeMap.create(recipes));
                         var holder = (net.minecraft.world.item.crafting.RecipeHolder<net.minecraft.world.item.crafting.CraftingRecipe>)(Object)manager.getRecipes().stream()
@@ -157,21 +165,66 @@ public final class EditorSmoke {
                 shot("recipe-tree-root");
                 var nodes = (List<RecipeTree.Node>)field("nodes");
                 check(nodes.size() > 320, "Tree stopped at former node cap");
-                check(((Set<?>)field("expanded")).size() == nodes.size(), "Tree did not default to expanded");
+                var expanded = (Set<Integer>)field("expanded");
+                var heads = (Map<Integer, Integer>)field("groupHeads");
+                int compressed = -1, variant = -1;
+                for (int i = 0; i < nodes.size(); i++) {
+                    if (nodes.get(i).recipeId().equals("smoke:compressed_planks")) compressed = i;
+                    if (nodes.get(i).recipeId().equals("smoke:white_variant")) variant = i;
+                }
+                check(compressed > 0 && !expanded.contains(heads.get(compressed)), "Compressed route did not start collapsed");
+                check(variant > 0 && !expanded.contains(heads.get(variant)), "Color variants did not group/collapse");
+                var groups = (Map<Integer, List<Integer>>)field("groupMembers");
+                check(groups.get(heads.get(variant)).size() == 2, "Color recipes were not grouped together");
+                record("Compressed route folded and color variants grouped");
                 check(!((Map<?, ?>)field("sharedBranches")).isEmpty(), "Repeated materials were not shared");
                 mc.screen.keyPressed(new net.minecraft.client.input.KeyEvent(61, 0, 0));
                 check((double)field("zoom") > 1, "Zoom failed");
+                mc.screen.mouseScrolled(200, 100, 0, -1);
+                double beforeWheel = (double)field("zoom");
+                mc.screen.mouseScrolled(200, 100, 0, 1);
+                check((double)field("zoom") > beforeWheel, "Wheel did not zoom");
+                record("Mouse wheel zoomed in and out");
                 clickButton("Reset view");
                 selectedRecipe = -1;
                 for (int i = 0; i < nodes.size(); i++) if (nodes.get(i).recipe()) { selectedRecipe = i; break; }
                 check(selectedRecipe > 0, "No recipes loaded");
-                focusNode(selectedRecipe); next(10);
+                selectedVariant = heads.get(variant);
+                int preview = displayNode(selectedVariant);
+                setField("ticks", (int)field("ticks") + 40);
+                check(displayNode(selectedVariant) != preview, "Collapsed preview did not cycle");
+                var members = groups.get(selectedVariant);
+                setField("hoveredHead", selectedVariant); setField("hoveredVariant", members.indexOf(preview));
+                check(displayNode(selectedVariant) == preview, "Hover did not freeze preview");
+                setField("ticks", (int)field("ticks") + 40);
+                check(displayNode(selectedVariant) == preview, "Hovered preview changed");
+                setField("hoveredHead", -1);
+                focusNode(selectedVariant); next(25);
+            } else if (phase == 25 && ticks - since > 10) {
+                int preview = displayNode(selectedVariant);
+                mc.screen.mouseClicked(new MouseButtonEvent(130, 127, new MouseButtonInfo(0, 0)), false);
+                check(displayNode(selectedVariant) != preview, "Variant arrow did not change type");
+                int chosen = displayNode(selectedVariant);
+                mc.screen.mouseClicked(new MouseButtonEvent(40, 80, new MouseButtonInfo(0, 0)), true);
+                check(((Set<Integer>)field("expanded")).contains(selectedVariant), "Variant branch did not expand");
+                setField("ticks", (int)field("ticks") + 40);
+                check(displayNode(selectedVariant) == chosen, "Expanded type changed unexpectedly");
+                clickButton("Disable route");
+                check(!((Set<Integer>)field("expanded")).contains(selectedVariant), "Variant ban did not collapse path");
+                clickButton("Enable route");
+                record("Variant previews cycle, pause on hover, and support type selection and path collapse");
+                next(26);
+            } else if (phase == 26 && ticks - since > 10) {
+                shot("recipe-tree-variants"); focusNode(selectedRecipe); next(10);
             } else if (phase == 10 && ticks - since > 10) {
                 shiftClickSelected();
                 var nodes = (List<RecipeTree.Node>)field("nodes");
                 var excluded = (Set<String>)field("excluded");
                 check(excluded.equals(Set.of(nodes.get(selectedRecipe).recipeId())), "Shift-click banned unrelated alternatives");
-                record("Shift-click banned exactly the clicked recipe throughout the pattern");
+                check(!((Set<Integer>)field("expanded")).contains(((Map<Integer, Integer>)field("groupHeads")).get(selectedRecipe)), "Blocked recipe did not collapse");
+                clickButton("Always block");
+                check(((Set<String>)field("personalDefaults")).equals(excluded), "Always block did not remember exact recipe");
+                record("Shift-click collapsed the blocked route; Always block queued a personal default");
                 next(22);
             } else if (phase == 22 && ticks - since > 10) {
                 shot("recipe-tree-expanded"); clickButton("Save");
@@ -180,17 +233,39 @@ public final class EditorSmoke {
                 check(mc.player.containerMenu instanceof PatternEncodingTermMenu, "Save closed terminal menu");
                 check(!PatternRecipeRules.read(terminalPattern()).isEmpty(), "Terminal pattern did not receive saved rules");
                 record("Save updated encoded slot and returned to terminal");
+                check(!RecipeDefaults.load(com.lumengrid.recursiveae2patternprovider.client.ClientRecipeDefaults.path()).isEmpty(), "Personal defaults did not persist");
+                var server = mc.getSingleplayerServer(); server.execute(() -> {
+                    try {
+                        var player = server.getPlayerList().getPlayers().getFirst();
+                        var menu = (PatternEncodingTermMenu)player.containerMenu;
+                        var treeMenu = (com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu)menu;
+                        check(!treeMenu.recursiveAE2$defaults().isEmpty(), "Client defaults did not reach encoding menu");
+                        treeMenu.recursiveAE2$treeSlot().set(ItemStack.EMPTY);
+                        menu.setMode(appeng.parts.encoding.EncodingMode.CRAFTING);
+                        var slots = menu.getCraftingGridSlots();
+                        for (int i = 0; i < slots.length; i++) slots[i].set(Set.of(0, 1, 3, 4).contains(i) ? new ItemStack(Items.OAK_PLANKS) : ItemStack.EMPTY);
+                        var blank = PatternEncodingTermMenu.class.getDeclaredField("blankPatternSlot"); blank.setAccessible(true);
+                        ((net.minecraft.world.inventory.Slot)blank.get(menu)).set(appeng.core.definitions.AEItems.BLANK_PATTERN.stack());
+                        menu.encode();
+                        check(PatternRecipeRules.read(treeMenu.recursiveAE2$treeSlot().getItem()).equals(treeMenu.recursiveAE2$defaults()), "New encoded pattern did not inherit defaults");
+                        menu.broadcastChanges();
+                    } catch (Throwable e) { serverFailure = e; }
+                }); next(24);
+            } else if (phase == 24 && ticks - since > 30) {
+                record("New pattern encoded through AE2 inherited the client blacklist");
                 clickTreeButton(); next(12);
             } else if (phase == 12 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
-                clickButton("Reset rules"); clickButton("Cancel"); next(13);
+                clickButton("Reset rules"); removeDefaultInManager(); clickButton("Cancel"); next(13);
             } else if (phase == 13 && !(mc.screen instanceof RecipeTreeScreen) && ticks - since > 20) {
                 check(!PatternRecipeRules.read(terminalPattern()).isEmpty(), "Cancel changed saved rules");
-                record("Cancel returned to terminal and preserved rules");
+                check(!RecipeDefaults.load(com.lumengrid.recursiveae2patternprovider.client.ClientRecipeDefaults.path()).isEmpty(), "Cancel changed personal defaults");
+                record("Cancel returned to terminal and preserved pattern rules and personal defaults");
                 clickTreeButton(); next(14);
             } else if (phase == 14 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
-                clickButton("Reset rules"); clickButton("Save"); next(15);
+                clickButton("Reset rules"); removeDefaultInManager(); clickButton("Save"); next(15);
             } else if (phase == 15 && !(mc.screen instanceof RecipeTreeScreen) && ticks - since > 20) {
                 check(PatternRecipeRules.read(terminalPattern()).isEmpty(), "Reset did not save");
+                check(RecipeDefaults.load(com.lumengrid.recursiveae2patternprovider.client.ClientRecipeDefaults.path()).isEmpty(), "Removing default did not persist");
                 clickTreeButton(); next(16);
             } else if (phase == 16 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
                 var server = mc.getSingleplayerServer(); server.execute(() -> {
@@ -228,7 +303,14 @@ public final class EditorSmoke {
             catch (Exception nested) { RecursiveAE2PatternProvider.LOGGER.error("Smoke failure", e); failed = true; mc.stop(); }
         }
     }
-    private static int selectedRecipe;
+    private static int selectedRecipe, selectedVariant;
+    private static void setField(String name, int value) throws Exception {
+        var f = RecipeTreeScreen.class.getDeclaredField(name); f.setAccessible(true); f.setInt(Minecraft.getInstance().screen, value);
+    }
+    private static int displayNode(int head) throws Exception {
+        var method = RecipeTreeScreen.class.getDeclaredMethod("displayed", int.class); method.setAccessible(true);
+        return (int)method.invoke(Minecraft.getInstance().screen, head);
+    }
     private static Object field(String name) throws Exception {
         var f = RecipeTreeScreen.class.getDeclaredField(name); f.setAccessible(true); return f.get(Minecraft.getInstance().screen);
     }
@@ -256,6 +338,12 @@ public final class EditorSmoke {
             px.setDouble(Minecraft.getInstance().screen, 30 - (int)x.invoke(box));
             py.setDouble(Minecraft.getInstance().screen, 12 - (int)y.invoke(box));
         }
+    }
+    private static void removeDefaultInManager() {
+        var mc = Minecraft.getInstance(); clickButton("Defaults: 1");
+        int w = Math.min(420, mc.screen.width - 32), h = Math.min(260, mc.screen.height - 32);
+        mc.screen.mouseClicked(new MouseButtonEvent((mc.screen.width - w) / 2 + 12, (mc.screen.height - h) / 2 + 52, new MouseButtonInfo(0, 0)), false);
+        mc.screen.keyPressed(new net.minecraft.client.input.KeyEvent(256, 0, 0));
     }
     private static void shiftClickSelected() { Minecraft.getInstance().screen.mouseClicked(new MouseButtonEvent(40, 80, new MouseButtonInfo(0, 1)), false); }
     private static void requestTerminal(Minecraft mc) {

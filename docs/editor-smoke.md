@@ -16,8 +16,11 @@ The run exercises:
 - Pattern Encoding, Crafting, Pattern Access and ME terminals, including recursive-mode synchronization.
 - Opening the editor through the terminal button with a real encoded crafting pattern.
 - Automatically loading 200 additional recipe alternatives across multiple server responses, exceeding 320 total nodes.
-- Expanded defaults, shared-ingredient links, zoom and reset view.
-- Shift-click excluding only the selected recipe, leaving alternative recipes available.
+- Expanded defaults, shared-ingredient links, wheel zoom and reset view.
+- Folded compressed routes, grouped color recipes, cycling previews, hover pause and type selection.
+- Shift-click excluding only the selected recipe, leaving alternatives available and collapsing the blocked path.
+- Saving a personal blacklist, inheriting it through AE2 encoding a new pattern, and removing remembered recipes.
+- Cancel preserving both pattern rules and saved personal defaults.
 - Saving to the encoded slot and returning to the terminal, cancelling edits and resetting rules.
 - Blocking Cancel during a pending save and rejecting a changed encoded pattern without overwriting its replacement.
 - Checking that right-clicking a held pattern and requests for an invalid menu cannot open the editor.

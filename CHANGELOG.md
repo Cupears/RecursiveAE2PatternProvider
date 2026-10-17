@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0-beta.7
+
+- Mouse-wheel zoom follows the cursor.
+- Added a personal recipe blacklist and management panel; new recursive patterns inherit saved defaults.
+- Blocked recipe paths collapse immediately, and compressed routes start collapsed.
+- Grouped color and wood types into compact cards with cycling previews and type controls.
+
 ## 1.2.0-beta.6
 
 - Restored the left-to-right recipe-tree layout and horizontal connectors.
