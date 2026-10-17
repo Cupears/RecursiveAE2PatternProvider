@@ -59,6 +59,20 @@ class TreePresentationTest {
         RecipeDefaults.save(file, Set.of()); assertTrue(RecipeDefaults.load(file).isEmpty());
         Files.writeString(file, "{broken"); assertThrows(java.io.IOException.class, () -> RecipeDefaults.load(file));
     }
+    @Test void unchangedDefaultsDoNotWriteAndConcurrentEditsArePreserved(MinecraftServer server, @TempDir Path dir) throws Exception {
+        var missing = dir.resolve("missing.json"); RecipeDefaults.saveChanges(missing, Set.of(), Set.of());
+        assertFalse(Files.exists(missing));
+        var file = dir.resolve("defaults.json");
+        var original = Set.of("test:hats"); RecipeDefaults.save(file, original);
+        RecipeDefaults.save(file, Set.of("test:external"));
+        var external = Files.readString(file);
+        RecipeDefaults.saveChanges(file, original, original);
+        assertEquals(external, Files.readString(file));
+        assertThrows(java.io.IOException.class, () -> RecipeDefaults.saveChanges(file, original, Set.of("test:new")));
+        assertEquals(external, Files.readString(file));
+        RecipeDefaults.saveChanges(file, Set.of("test:external"), Set.of("test:new"));
+        assertEquals(Set.of("test:new"), RecipeDefaults.load(file));
+    }
     @Test void newPatternsInheritDefaultsAndReencodingRetainsOverrides(MinecraftServer server) {
         var pattern = PatternDetailsHelper.encodeProcessingPattern(List.of(new GenericStack(AEItemKey.of(Items.DIRT), 1)),
                 List.of(new GenericStack(AEItemKey.of(Items.CHEST), 1)));

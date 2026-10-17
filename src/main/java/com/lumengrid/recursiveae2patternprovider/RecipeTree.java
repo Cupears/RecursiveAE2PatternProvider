@@ -20,6 +20,19 @@ public record RecipeTree(List<Node> nodes, boolean truncated) {
         for (var node : nodes) if (node.recipe()) ids.add(node.recipeId());
         return Set.copyOf(ids);
     }
+    public RecipeTree opening() {
+        return new RecipeTree(List.copyOf(nodes.subList(0, Math.min(MAX_NODES, nodes.size()))), nodes.size() > MAX_NODES);
+    }
+    public Page rootPage(int offset) {
+        int remaining = Math.max(0, nodes.size() - MAX_NODES);
+        if (offset < 0 || offset > remaining) throw new IllegalArgumentException("Invalid root page offset");
+        int end = offset + Math.min(MAX_NODES, remaining - offset);
+        return new Page(List.copyOf(nodes.subList(Math.min(MAX_NODES, nodes.size()) + offset,
+                Math.min(MAX_NODES, nodes.size()) + end)), end, end == remaining, 0);
+    }
+    static int displayAmount(long amount, long multiplier) {
+        return (int)Math.min(64, Math.clamp(amount, 0, 64) * Math.clamp(multiplier, 0, 64));
+    }
     public static RecipeTree build(IPatternDetails pattern, Level level) {
         var nodes = new ArrayList<Node>();
         var primary = pattern.getPrimaryOutput();
@@ -28,7 +41,7 @@ public record RecipeTree(List<Node> nodes, boolean truncated) {
         Set<AEItemKey> inputs = new HashSet<>();
         for (var input : pattern.getInputs()) for (var candidate : input.getPossibleInputs()) {
             if (!(candidate.what() instanceof AEItemKey key) || !inputs.add(key)) continue;
-            var stack = key.toStack((int)Math.min(64, candidate.amount() * input.getMultiplier()));
+            var stack = key.toStack(displayAmount(candidate.amount(), input.getMultiplier()));
             nodes.add(new Node(0, false, stack, "", List.of(), stack.is(output.getItem()) ? 2 : 0));
         }
         return new RecipeTree(List.copyOf(nodes), false);

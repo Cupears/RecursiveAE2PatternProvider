@@ -23,6 +23,7 @@ public final class RecipeTreeScreen extends Screen {
     private final ArrayDeque<Integer> loadQueue = new ArrayDeque<>();
     private boolean layoutDirty = true, centerOnRoot = true;
     private final Set<String> excluded;
+    private final Set<String> originalDefaults;
     private final Set<String> personalDefaults = new HashSet<>();
     private boolean defaultsWritable = true, managingDefaults;
     private int defaultsScroll;
@@ -57,6 +58,9 @@ public final class RecipeTreeScreen extends Screen {
         try { personalDefaults.addAll(RecipeDefaults.load(ClientRecipeDefaults.path())); }
         catch (java.io.IOException e) { defaultsWritable = false; status = tr("defaults_error");
             RecursiveAE2PatternProvider.LOGGER.warn("Could not read personal recipe defaults", e); }
+        originalDefaults = Set.copyOf(personalDefaults);
+        if (snapshot.tree().truncated()) loadQueue.add(0);
+        else complete.add(0);
         expanded.add(0);
         for (int i = 0; i < nodes.size(); i++) {
             if (i > 0) children.computeIfAbsent(nodes.get(i).parent(), k -> new ArrayList<>()).add(i);
@@ -110,7 +114,7 @@ public final class RecipeTreeScreen extends Screen {
         mc.setScreen(mc.player != null && mc.player.containerMenu == terminalMenu ? terminalScreen : null);
     }
     private void requestBranch(int id) {
-        if (id == 0 || nodes.get(id).recipe() || nodes.get(id).note() == 2 || complete.contains(id)
+        if (nodes.get(id).recipe() || nodes.get(id).note() == 2 || complete.contains(id)
                 || pending.containsKey(id) || invalidSession || waiting) return;
         pending.put(id, ticks);
         ClientPacketDistributor.sendToServer(new RecipeTreePackets.Expand(snapshot.session(), id, offsets.getOrDefault(id, 0)));
@@ -149,7 +153,7 @@ public final class RecipeTreeScreen extends Screen {
             screen.closed = true;
             boolean defaultsSaved = true;
             if (screen.defaultsWritable) try {
-                RecipeDefaults.save(ClientRecipeDefaults.path(), screen.personalDefaults);
+                RecipeDefaults.saveChanges(ClientRecipeDefaults.path(), screen.originalDefaults, screen.personalDefaults);
                 ClientRecipeDefaults.send(Set.copyOf(screen.personalDefaults));
             } catch (java.io.IOException e) {
                 defaultsSaved = false; RecursiveAE2PatternProvider.LOGGER.warn("Could not save personal recipe defaults", e);
@@ -257,13 +261,16 @@ public final class RecipeTreeScreen extends Screen {
         g.verticalLine(x + w - 1, y, y + h - 1, 0xFF705C48);
     }
     private static final class MenuButton extends Button {
+        private Component tooltipMessage;
         private MenuButton(Button.Builder builder) { super(builder); }
         @Override protected void extractContents(GuiGraphicsExtractor g, int mx, int my, float partial) {
             int fill = !active ? 0xFFC1B7AA : isHoveredOrFocused() ? 0xFFFFD59F : 0xFFE9C398;
             panel(g, getX(), getY(), getWidth(), getHeight(), fill);
             var font = Minecraft.getInstance().font;
             String label = font.plainSubstrByWidth(getMessage().getString(), Math.max(1, getWidth() - 6));
-            setTooltip(net.minecraft.client.gui.components.Tooltip.create(getMessage()));
+            if (!getMessage().equals(tooltipMessage)) {
+                tooltipMessage = getMessage(); setTooltip(net.minecraft.client.gui.components.Tooltip.create(tooltipMessage));
+            }
             g.text(font, label, getX() + (getWidth() - font.width(label)) / 2,
                     getY() + (getHeight() - font.lineHeight) / 2, active ? 0xFF493729 : 0xFF857C72, false);
         }
@@ -392,7 +399,7 @@ public final class RecipeTreeScreen extends Screen {
                 selected = displayed(box.id()); layoutDirty = true; updateButtons(); return true;
             }
             selected = actual;
-            if (variants.size() > 1) variantChoice.put(box.id(), variants.indexOf(actual));
+            variantChoice.put(box.id(), variants.indexOf(actual));
             updateButtons();
             var node = nodes.get(selected);
             if ((event.button() == 1 || event.hasShiftDown()) && node.recipe()) toggleSelected();

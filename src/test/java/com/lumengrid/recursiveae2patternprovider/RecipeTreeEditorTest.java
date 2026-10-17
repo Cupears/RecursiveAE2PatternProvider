@@ -136,6 +136,46 @@ class RecipeTreeEditorTest {
             } finally { buf.release(); }
         });
     }
+    @Test void largeInitialIngredientSetsFitPagedPackets(MinecraftServer server) throws Exception {
+        var base = details(pattern(Items.REDSTONE, Items.CLOCK, Set.of()));
+        var candidates = net.minecraft.core.registries.BuiltInRegistries.ITEM.stream().filter(i -> i != Items.AIR)
+                .limit(700).map(i -> new GenericStack(AEItemKey.of(i), Long.MAX_VALUE)).toArray(GenericStack[]::new);
+        IPatternDetails root = new IPatternDetails() {
+            public AEItemKey getDefinition() { return base.getDefinition(); }
+            public List<GenericStack> getOutputs() { return base.getOutputs(); }
+            public IInput[] getInputs() { return new IInput[]{new IInput() {
+                public GenericStack[] getPossibleInputs() { return candidates; }
+                public long getMultiplier() { return Long.MAX_VALUE; }
+                public boolean isValid(appeng.api.stacks.AEKey key, net.minecraft.world.level.Level level) { return true; }
+                public appeng.api.stacks.AEKey getRemainingKey(appeng.api.stacks.AEKey key) { return null; }
+            }}; }
+        };
+        var tree = RecipeTree.build(root, recipeLevel(server));
+        assertEquals(candidates.length + 1, tree.nodes().size());
+        assertTrue(tree.nodes().stream().skip(1).allMatch(n -> n.item().getCount() == 64));
+        var opening = tree.opening(); assertTrue(opening.truncated()); assertEquals(RecipeTree.MAX_NODES, opening.nodes().size());
+        var buf = buffer(server);
+        try {
+            var id = UUID.randomUUID();
+            RecipeTreePackets.Open.CODEC.encode(buf, new RecipeTreePackets.Open(id, opening, Set.of()));
+            var decoded = RecipeTreePackets.Open.CODEC.decode(buf);
+            var combined = new ArrayList<>(decoded.tree().nodes());
+            int offset = 0; boolean done;
+            do {
+                var page = tree.rootPage(offset);
+                assertTrue(page.nodes().size() <= RecipeTree.MAX_NODES);
+                RecipeTreePackets.Branch.CODEC.encode(buf, new RecipeTreePackets.Branch(id, 0, combined.size(), page));
+                var branch = RecipeTreePackets.Branch.CODEC.decode(buf);
+                assertEquals(0, branch.parent()); combined.addAll(branch.page().nodes());
+                offset = page.nextOffset(); done = page.done();
+            } while (!done);
+            assertEquals(tree.nodes().size(), combined.size());
+            for (int i = 0; i < combined.size(); i++) assertTrue(ItemStack.matches(tree.nodes().get(i).item(), combined.get(i).item()));
+            assertEquals(0, buf.readableBytes());
+            assertThrows(IllegalArgumentException.class, () -> tree.rootPage(-1));
+            assertThrows(IllegalArgumentException.class, () -> tree.rootPage(tree.nodes().size()));
+        } finally { buf.release(); }
+    }
     @Test void allAlternativesAreReachableAcrossPagesWithoutATreeCap(MinecraftServer server) throws Exception {
         var recipes = new ArrayList<RecipeHolder<?>>();
         for (int i = 0; i < 200; i++) recipes.add(recipe("test:alternative_" + i, Items.DIRT, Items.REDSTONE, 1));

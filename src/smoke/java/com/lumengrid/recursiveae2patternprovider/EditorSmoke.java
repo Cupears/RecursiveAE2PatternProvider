@@ -138,7 +138,7 @@ public final class EditorSmoke {
                             recipes.add(new net.minecraft.world.item.crafting.RecipeHolder<>(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.RECIPE,
                                     net.minecraft.resources.Identifier.parse("smoke:planks_" + i)), recipe));
                         }
-                        for (var entry : Map.of("white_variant", Items.WHITE_WOOL, "red_variant", Items.RED_WOOL, "compressed_planks", Items.DIRT).entrySet()) {
+                        for (var entry : Map.of("white_variant", Items.WHITE_WOOL, "red_variant", Items.RED_WOOL, "compressed_planks", Items.DIRT, "zz_oak_from_birch", Items.BIRCH_LOG).entrySet()) {
                             var recipe = new net.minecraft.world.item.crafting.ShapedRecipe(null, null,
                                     net.minecraft.world.item.crafting.ShapedRecipePattern.of(Map.of('I', net.minecraft.world.item.crafting.Ingredient.of(entry.getValue())), "I"),
                                     new ItemStackTemplate(Items.OAK_PLANKS, 4));
@@ -159,12 +159,23 @@ public final class EditorSmoke {
                 }); next(8);
             } else if (phase == 8 && ticks - since > 30) {
                 shot("encoding-terminal-tree-button");
-                clickTreeButton(); next(9);
+                clickTreeButton(); next(27);
+            } else if (phase == 27 && mc.screen instanceof RecipeTreeScreen) {
+                var earlyNodes = (List<RecipeTree.Node>)field("nodes");
+                for (int i = 0; i < earlyNodes.size(); i++) if (earlyNodes.get(i).recipe()) {
+                    earlyRecipe = i; focusNode(i); next(31); break;
+                }
+            } else if (phase == 31 && ticks - since > 0) {
+                check(((Map<Integer, List<Integer>>)field("groupMembers")).get(earlyRecipe).size() == 1, "Late type arrived before selection check");
+                mc.screen.mouseClicked(new MouseButtonEvent(40, 80, new MouseButtonInfo(0, 0)), false); next(9);
             } else if (phase == 9 && mc.screen instanceof RecipeTreeScreen && ticks - since > 80 && treeIdle()) {
                 record("Terminal button opened tree; all branches loaded automatically");
                 shot("recipe-tree-root");
                 var nodes = (List<RecipeTree.Node>)field("nodes");
                 check(nodes.size() > 320, "Tree stopped at former node cap");
+                check(((Map<Integer, List<Integer>>)field("groupMembers")).get(earlyRecipe).size() == 2, "Late wood type was not grouped");
+                check(((Set<Integer>)field("expanded")).contains(earlyRecipe), "Late type collapsed a selected branch");
+                record("Late-arriving variants preserved the selected expanded branch");
                 var expanded = (Set<Integer>)field("expanded");
                 var heads = (Map<Integer, Integer>)field("groupHeads");
                 int compressed = -1, variant = -1;
@@ -296,14 +307,44 @@ public final class EditorSmoke {
             } else if (phase == 21 && ticks - since > 20) {
                 check(!(mc.screen instanceof RecipeTreeScreen), "Held pattern or forged menu opened editor");
                 record("Right-click no longer opens editor; invalid menu request rejected");
-                finish(mc, "PASS");
+                terminal = 0; requestTerminal(mc); next(28);
+            } else if (phase == 28 && mc.player.containerMenu instanceof PatternEncodingTermMenu && ticks - since > 20) {
+                var server = mc.getSingleplayerServer(); server.execute(() -> {
+                    try {
+                        var player = server.getPlayerList().getPlayers().getFirst();
+                        var manager = server.getRecipeManager();
+                        var candidates = net.minecraft.core.registries.BuiltInRegistries.ITEM.stream().filter(i -> i != Items.AIR).limit(700).toArray(Item[]::new);
+                        var recipe = new net.minecraft.world.item.crafting.ShapedRecipe(null, null,
+                                net.minecraft.world.item.crafting.ShapedRecipePattern.of(Map.of('I', net.minecraft.world.item.crafting.Ingredient.of(candidates)), "I"),
+                                new ItemStackTemplate(Items.CLOCK, 1));
+                        var holder = new net.minecraft.world.item.crafting.RecipeHolder<net.minecraft.world.item.crafting.CraftingRecipe>(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.RECIPE,
+                                net.minecraft.resources.Identifier.parse("smoke:wide_inputs")), recipe);
+                        var recipes = new ArrayList<net.minecraft.world.item.crafting.RecipeHolder<?>>(manager.getRecipes()); recipes.add(holder);
+                        var field = manager.getClass().getDeclaredField("recipes"); field.setAccessible(true);
+                        field.set(manager, net.minecraft.world.item.crafting.RecipeMap.create(recipes));
+                        ItemStack[] input = new ItemStack[9]; Arrays.fill(input, ItemStack.EMPTY); input[0] = new ItemStack(Items.DIRT);
+                        var pattern = PatternDetailsHelper.encodeCraftingPattern(holder, input, new ItemStack(Items.CLOCK), true, false);
+                        PatternUtil.setRecursive(pattern, true);
+                        var details = PatternDetailsHelper.decodePattern(pattern, player.level());
+                        check(RecipeTree.build(details, player.level()).nodes().size() > 320, "Wide pattern did not expose enough alternatives");
+                        ((com.lumengrid.recursiveae2patternprovider.menu.IRecipeTreeMenu)player.containerMenu).recursiveAE2$treeSlot().set(pattern);
+                        player.containerMenu.broadcastChanges();
+                    } catch (Throwable e) { serverFailure = e; }
+                }); next(29);
+            } else if (phase == 29 && ticks - since > 30) {
+                clickTreeButton(); next(30);
+            } else if (phase == 30 && mc.screen instanceof RecipeTreeScreen && ((Set<Integer>)field("complete")).contains(0)) {
+                var nodes = (List<RecipeTree.Node>)field("nodes");
+                check(nodes.stream().filter(n -> n.parent() == 0).count() == 700, "Initial ingredient pages lost alternatives");
+                record("700 initial ingredient alternatives opened and loaded through root paging");
+                clickButton("Cancel"); finish(mc, "PASS");
             }
         } catch (Throwable e) {
             try { finish(mc, "FAIL phase " + phase + ": " + e); }
             catch (Exception nested) { RecursiveAE2PatternProvider.LOGGER.error("Smoke failure", e); failed = true; mc.stop(); }
         }
     }
-    private static int selectedRecipe, selectedVariant;
+    private static int selectedRecipe, selectedVariant, earlyRecipe;
     private static void setField(String name, int value) throws Exception {
         var f = RecipeTreeScreen.class.getDeclaredField(name); f.setAccessible(true); f.setInt(Minecraft.getInstance().screen, value);
     }

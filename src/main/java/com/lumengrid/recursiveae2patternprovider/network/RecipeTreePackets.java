@@ -129,7 +129,7 @@ public final class RecipeTreePackets {
                 boolean done = buf.readBoolean(); int note = bounded(buf.readVarInt(), 2);
                 int count = bounded(buf.readVarInt(), RecipeTree.MAX_NODES);
                 var nodes = new ArrayList<RecipeTree.Node>();
-                if (parent < 1 || start <= parent || start > Integer.MAX_VALUE - count) throw new IllegalArgumentException("Invalid branch range");
+                if (parent < 0 || start <= parent || start > Integer.MAX_VALUE - count) throw new IllegalArgumentException("Invalid branch range");
                 for (int i = 0; i < count; i++) {
                     int nodeParent = buf.readVarInt();
                     if (nodeParent != parent && (nodeParent < start || nodeParent >= start + i)) throw new IllegalArgumentException("Invalid branch parent");

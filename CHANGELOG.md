@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0-beta.8
+
+- Paged large initial ingredient lists so patterns with hundreds of accepted inputs can open.
+- Preserved selected branches when more variants arrive during loading.
+- Protected personal defaults changed outside the editor and skipped unchanged file writes.
+- Prevented large ingredient counts from overflowing and reduced tooltip rebuilding.
+
 ## 1.2.0-beta.7
 
 - Mouse-wheel zoom follows the cursor.

@@ -25,6 +25,11 @@ public final class RecipeDefaults {
             return Set.copyOf(result);
         } catch (RuntimeException e) { throw new IOException("Invalid recipe defaults file", e); }
     }
+    public static void saveChanges(Path file, Set<String> expected, Set<String> proposed) throws IOException {
+        if (expected.equals(proposed)) return;
+        if (!load(file).equals(expected)) throw new IOException("Personal defaults changed while the editor was open");
+        save(file, proposed);
+    }
     public static void save(Path file, Set<String> ids) throws IOException {
         if (ids.size() > PatternRecipeRules.MAX_EXCLUSIONS || ids.stream().anyMatch(id -> !PatternRecipeRules.valid(id)))
             throw new IOException("Invalid recipe defaults");

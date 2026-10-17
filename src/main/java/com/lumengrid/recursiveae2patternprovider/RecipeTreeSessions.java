@@ -11,7 +11,7 @@ import java.util.*;
 @net.neoforged.fml.common.EventBusSubscriber(modid = RecursiveAE2PatternProvider.MODID)
 public final class RecipeTreeSessions {
     private record Session(UUID id, net.minecraft.world.inventory.AbstractContainerMenu menu, net.minecraft.world.inventory.Slot slot, ItemStack original,
-                           Set<String> shown, Set<String> excluded, long opened, List<RecipeTree.Node> nodes,
+                           Set<String> shown, Set<String> excluded, long opened, List<RecipeTree.Node> nodes, RecipeTree rootTree,
                            Map<Integer, Integer> offsets, Set<Integer> complete) {}
     private static final Map<ServerPlayer, Session> SESSIONS = new WeakHashMap<>();
     private static final Map<ServerPlayer, Long> LAST_OPEN = new WeakHashMap<>();
@@ -47,9 +47,9 @@ public final class RecipeTreeSessions {
             var tree = RecipeTree.build(details, player.level());
             var exclusions = PatternRecipeRules.read(stack);
             var session = new Session(UUID.randomUUID(), menu, slot,
-                    stack.copy(), new HashSet<>(), exclusions, now, new ArrayList<>(tree.nodes()), new HashMap<>(), new HashSet<>());
+                    stack.copy(), new HashSet<>(), exclusions, now, new ArrayList<>(tree.opening().nodes()), tree, new HashMap<>(), new HashSet<>());
             SESSIONS.put(player, session);
-            PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Open(session.id(), tree, exclusions));
+            PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Open(session.id(), tree.opening(), exclusions));
         } catch (RuntimeException e) {
             RecursiveAE2PatternProvider.LOGGER.warn("Could not open recipe tree", e);
             player.sendOverlayMessage(Component.translatable("gui.recursiveae2patternprovider.tree.error"));
@@ -78,11 +78,12 @@ public final class RecipeTreeSessions {
             return;
         }
         int parent = request.parent();
-        if (parent <= 0 || parent >= session.nodes().size() || session.nodes().get(parent).recipe()
+        if (parent < 0 || parent >= session.nodes().size() || session.nodes().get(parent).recipe()
                 || session.complete().contains(parent) || request.offset() != session.offsets().getOrDefault(parent, 0)) return;
         try {
             int start = session.nodes().size();
-            var page = RecipeTree.expand(session.nodes(), parent, request.offset(), player.level());
+            var page = parent == 0 ? session.rootTree().rootPage(request.offset())
+                    : RecipeTree.expand(session.nodes(), parent, request.offset(), player.level());
             session.nodes().addAll(page.nodes());
             for (var node : page.nodes()) if (node.recipe()) session.shown().add(node.recipeId());
             session.offsets().put(parent, page.nextOffset());
