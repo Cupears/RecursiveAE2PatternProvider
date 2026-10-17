@@ -45,8 +45,12 @@ public record RecipeTree(List<Node> nodes, boolean truncated) {
         int choice = 0;
         for (var input : pattern.getInputs()) {
             Set<appeng.api.stacks.GenericStack> unique = new HashSet<>();
-            for (var candidate : input.getPossibleInputs()) {
+            var candidates = input.getPossibleInputs();
+            var preferred = IngredientChoices.prefer(Arrays.stream(candidates)
+                    .filter(c -> c.what() instanceof AEItemKey).map(c -> ((AEItemKey)c.what()).getItem()).toList());
+            for (var candidate : candidates) {
                 if (!(candidate.what() instanceof AEItemKey key) || !unique.add(candidate)) continue;
+                if (!preferred.contains(key.getItem())) continue;
                 var stack = key.toStack(displayAmount(candidate.amount(), input.getMultiplier()));
                 nodes.add(new Node(0, false, stack, "", List.of(), stack.is(output.getItem()) ? 2 : 0, choice));
             }
@@ -99,7 +103,7 @@ public record RecipeTree(List<Node> nodes, boolean truncated) {
                 }
             } catch (RuntimeException ignored) { /* Dynamic recipes have no static example to display. */ }
         }
-        return new Branch(added, added.isEmpty() ? 1 : 0);
+        return new Branch(added, added.isEmpty() ? (IngredientChoices.replaced(task.item().getItem()) ? 3 : 1) : 0);
     }
     private static Map<List<Item>, Integer> ingredientChoices(CraftingRecipe recipe, ItemStack[] grid) {
         var placement = recipe.placementInfo();
@@ -114,7 +118,7 @@ public record RecipeTree(List<Node> nodes, boolean truncated) {
                 index = placement.slotsToIngredientIndex().getInt(y * shaped.getWidth() + x);
             }
             List<Item> choices = index >= 0 && index < ingredients.size()
-                    ? ingredients.get(index).items().map(net.minecraft.core.Holder::value).distinct().toList()
+                    ? IngredientChoices.items(ingredients.get(index))
                     : List.of(grid[slot].getItem());
             if (!choices.isEmpty()) requirements.merge(choices, 1, Integer::sum);
         }

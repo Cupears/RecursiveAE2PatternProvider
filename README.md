@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.2.0-beta.9.jar` from Releases.
+1. Download `otter-patterns-1.2.0-beta.10.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
 4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.

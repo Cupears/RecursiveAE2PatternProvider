@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0-beta.10
+
+- Prefer accepted FTB Materials replacements over obsolete ingredient duplicates.
+- Omit hidden alternatives when visible choices exist in the tree and generated recipes.
+- Explain replaced exact ingredients without silently changing their requirements.
+
 ## 1.2.0-beta.9
 
 - Show tag and substitution alternatives as one ingredient choice, preserving quantities and separate requirements.

@@ -24,6 +24,39 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(EphemeralTestServerProvider.class)
 class RecipeTreeEditorTest {
+    @Test void hiddenTagChoicesAreFilteredInTreeGridAndGeneratedVariants(MinecraftServer server) throws Exception {
+        var holder = net.minecraft.core.registries.BuiltInRegistries.ITEM.wrapAsHolder(Items.GLASS);
+        var previousTags = holder.tags().toList();
+        var bind = holder.getClass().getDeclaredMethod("bindTags", Collection.class);
+        bind.setAccessible(true);
+        try {
+            var tags = new ArrayList<>(previousTags);
+            tags.add(net.minecraft.tags.TagKey.create(Registries.ITEM, Identifier.parse("c:hidden_from_recipe_viewers")));
+            bind.invoke(holder, tags);
+            var recipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of(
+                    'G', Ingredient.of(Items.GLASS, Items.WHITE_STAINED_GLASS), 'I', Ingredient.of(Items.IRON_INGOT)), "GGI"),
+                    new ItemStackTemplate(Items.CHEST));
+            var recipeHolder = new RecipeHolder<CraftingRecipe>(ResourceKey.create(Registries.RECIPE, Identifier.parse("test:hidden_choice")), recipe);
+            withRecipes(server, List.of(recipeHolder), () -> {
+                var initial = RecipeTree.build(details(pattern(Items.CHEST, Items.CLOCK, Set.of())), recipeLevel(server));
+                var page = RecipeTree.expand(new ArrayList<>(initial.nodes()), 1, 0, recipeLevel(server));
+                assertFalse(page.nodes().stream().anyMatch(n -> n.item().is(Items.GLASS)));
+                assertTrue(page.nodes().stream().anyMatch(n -> n.item().is(Items.WHITE_STAINED_GLASS) && n.item().getCount() == 2));
+                var grid = RecursivePatternGenerator.getRecipeInputsAs3x3Grid(recipe);
+                assertTrue(grid[0].is(Items.WHITE_STAINED_GLASS));
+                var stale = grid.clone(); stale[0] = new ItemStack(Items.GLASS); stale[1] = new ItemStack(Items.GLASS);
+                var variants = RecipeInputVariants.generate(recipe, stale, new ItemStack(Items.CHEST), null, 64);
+                assertEquals(1, variants.size());
+                assertTrue(variants.getFirst()[0].is(Items.WHITE_STAINED_GLASS));
+                var generated = RecursivePatternGenerator.generate(List.of(details(pattern(Items.CHEST, Items.CLOCK, Set.of()))), recipeLevel(server), -1);
+                assertFalse(consumes(generated, Items.GLASS));
+                assertTrue(consumes(generated, Items.WHITE_STAINED_GLASS));
+                // An exact hidden ingredient must not disappear or become a different item.
+                var exact = RecipeTree.build(details(pattern(Items.GLASS, Items.CLOCK, Set.of())), recipeLevel(server));
+                assertTrue(exact.nodes().get(1).item().is(Items.GLASS));
+            });
+        } finally { bind.invoke(holder, previousTags); }
+    }
     @Test void exclusionsArePerPatternAndPreserveUnrelatedData(MinecraftServer server) {
         var a = pattern(Items.REDSTONE, Items.CLOCK, Set.of());
         var b = a.copy();

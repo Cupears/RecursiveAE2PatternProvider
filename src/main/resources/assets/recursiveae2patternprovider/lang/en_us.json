@@ -45,7 +45,7 @@
   "gui.recursiveae2patternprovider.tree.note.0": "Ingredient recipes.",
   "gui.recursiveae2patternprovider.tree.note.1": "No eligible crafting route. Supply directly or provide a processing pattern.",
   "gui.recursiveae2patternprovider.tree.note.2": "Cycle back to an earlier item. Preview stops here.",
-  "gui.recursiveae2patternprovider.tree.note.3": "Preview depth limit reached.",
+  "gui.recursiveae2patternprovider.tree.note.3": "This item has a pack replacement. Re-encode the pattern or check its exact ingredient.",
   "gui.recursiveae2patternprovider.tree.note.4": "More routes exist beyond the preview limit.",
   "gui.recursiveae2patternprovider.tree.count": "Disabled recipes: %s (saved: %s)",
   "gui.recursiveae2patternprovider.tree.limited": "Preview is limited. Saved exclusions outside this view are kept.",

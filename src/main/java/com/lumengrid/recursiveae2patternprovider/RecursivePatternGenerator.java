@@ -271,12 +271,16 @@ public final class RecursivePatternGenerator {
         }
 
         for (var patternInput : pattern.getInputs()) {
-            for (var inputCandidate : patternInput.getPossibleInputs()) {
+            var candidates = patternInput.getPossibleInputs();
+            var preferred = IngredientChoices.prefer(Arrays.stream(candidates)
+                    .filter(c -> c.what() instanceof AEItemKey).map(c -> ((AEItemKey)c.what()).getItem()).toList());
+            for (var inputCandidate : candidates) {
                 try {
                     var key = inputCandidate.what();
                     if (!(key instanceof AEItemKey itemKey)) {
                         continue;
                     }
+                    if (!preferred.contains(itemKey.getItem())) continue;
 
                     if (!ctx.processedItems.add(itemKey)) {
                         continue;
@@ -439,9 +443,9 @@ public final class RecursivePatternGenerator {
 
                     if (ingredientIndex >= 0 && ingredientIndex < ingredients.size()) {
                         var ingredient = ingredients.get(ingredientIndex);
-                        var first = ingredient.items().findFirst();
-                        if (first.isPresent()) {
-                            inputs[gridIndex] = new ItemStack(first.get().value());
+                        var choices = IngredientChoices.items(ingredient);
+                        if (!choices.isEmpty()) {
+                            inputs[gridIndex] = new ItemStack(choices.getFirst());
                         }
                     }
                 }
@@ -449,9 +453,9 @@ public final class RecursivePatternGenerator {
         } else {
             int index = 0;
             for (var ingredient : ingredients) {
-                var first = ingredient.items().findFirst();
-                if (first.isPresent() && index < 9) {
-                    inputs[index] = new ItemStack(first.get().value());
+                var choices = IngredientChoices.items(ingredient);
+                if (!choices.isEmpty() && index < 9) {
+                    inputs[index] = new ItemStack(choices.getFirst());
                     index++;
                 }
             }

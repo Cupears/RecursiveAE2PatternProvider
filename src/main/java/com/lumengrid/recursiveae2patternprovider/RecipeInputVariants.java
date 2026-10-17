@@ -1,6 +1,5 @@
 package com.lumengrid.recursiveae2patternprovider;
 
-import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -17,7 +16,7 @@ final class RecipeInputVariants {
                                      Level level, int limit) {
         List<ItemStack[]> result = new ArrayList<>();
         if (limit <= 0) return result;
-        addIfValid(recipe, original, expected, level, result);
+        var preferred = original.clone();
         var placement = recipe.placementInfo();
         Map<List<Item>, List<Integer>> groups = new LinkedHashMap<>();
         var ingredients = placement.ingredients();
@@ -32,13 +31,16 @@ final class RecipeInputVariants {
                 ingredientIndex = slot;
             }
             if (ingredientIndex < 0 || ingredientIndex >= ingredients.size()) continue;
-            var options = ingredients.get(ingredientIndex).items().map(Holder::value).distinct()
+            var options = IngredientChoices.items(ingredients.get(ingredientIndex)).stream()
                     .sorted(Comparator.comparingInt((Item item) -> BuiltInRegistries.ITEM.getKey(item).getNamespace().equals("minecraft") ? 0 : 1)
                             .thenComparing(item -> BuiltInRegistries.ITEM.getKey(item).toString())).toList();
+            if (!options.isEmpty() && !options.contains(preferred[slot].getItem()))
+                preferred[slot] = new ItemStack(options.getFirst());
             if (options.size() > 1) groups.computeIfAbsent(options, k -> new ArrayList<>()).add(slot);
         }
         var choices = groups.entrySet().stream().map(e -> new Group(e.getKey(), e.getValue())).toList();
-        enumerate(recipe, original.clone(), expected, level, choices, 0, limit, new int[]{512}, result);
+        addIfValid(recipe, preferred, expected, level, result);
+        enumerate(recipe, preferred.clone(), expected, level, choices, 0, limit, new int[]{512}, result);
         return result;
     }
 

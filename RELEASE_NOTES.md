@@ -1,3 +1,3 @@
-- Fixed tag/glass alternatives appearing as separate required ingredients.
-- Preserved ingredient quantities and paged large nested choice groups.
-- Wrapped card text and kept full names/descriptions in tooltips.
+- Prefer accepted FTB Materials replacements over obsolete ingredient duplicates.
+- Omit hidden alternatives when visible choices exist in the tree and generated recipes.
+- Explain replaced exact ingredients without silently changing their requirements.
