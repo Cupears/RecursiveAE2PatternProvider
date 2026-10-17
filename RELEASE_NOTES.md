@@ -1,1 +1,6 @@
-Added mouse-wheel zoom, a personal recipe blacklist for new patterns, and a panel to manage remembered recipes. Blocked routes collapse immediately, compressed routes start collapsed, and color/wood types share compact cards with cycling previews and type controls.
+- Added a light-orange recipe-tree editor in pattern terminals.
+- Compact, expanded left-to-right trees with shared ingredients and cycling color/wood variants.
+- Full tree loading with cycle handling; blocked and compressed routes collapse.
+- Mouse-wheel zoom, drag panning, view reset and Shift-click recipe bans.
+- Saved per-pattern choices and personal blacklist defaults for new patterns, with Save/Cancel controls.
+- Fixed TransparentAE2 terminal compatibility and expired-session/save handling.
