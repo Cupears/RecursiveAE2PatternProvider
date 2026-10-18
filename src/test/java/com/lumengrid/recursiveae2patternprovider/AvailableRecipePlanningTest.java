@@ -152,6 +152,29 @@ class AvailableRecipePlanningTest {
     }
 
     @Test
+    void recursiveRootExplainsDirectMissingIngredient(MinecraftServer server) throws Exception {
+        var stack = PatternDetailsHelper.encodeProcessingPattern(
+                List.of(new GenericStack(AEItemKey.of(Items.GOLD_BLOCK), 1)),
+                List.of(new GenericStack(AEItemKey.of(Items.GOLD_INGOT), 9)));
+        PatternUtil.setRecursive(stack, true);
+        var root = new AEProcessingPattern(AEItemKey.of(stack));
+        var plan = calculate(List.of(root), Map.of(), Items.GOLD_INGOT, 9);
+        assertTrue(plan.simulation());
+        assertEquals(List.of(AEItemKey.of(Items.GOLD_INGOT)),
+                PlanExplanation.analyze(plan).get(AEItemKey.of(Items.GOLD_BLOCK)));
+    }
+
+    @Test
+    void flexibleMissingInputExplainsOnlyUnambiguousSource(MinecraftServer server) throws Exception {
+        var chest = flexibleWood(processing(List.of(new GenericStack(AEItemKey.of(Items.DARK_OAK_PLANKS), 8)), Items.CHEST, 1));
+        PlanExplanation.registerGenerated(chest);
+        var plan = calculate(List.of(chest), Map.of(), Items.CHEST, 1);
+        assertTrue(plan.simulation());
+        assertEquals(List.of(AEItemKey.of(Items.CHEST)),
+                PlanExplanation.analyze(plan).get(AEItemKey.of(Items.DARK_OAK_PLANKS)));
+    }
+
+    @Test
     void generatedPrimaryVariantsSupplyDrawerAndChestsFromOakLogs(MinecraftServer server) throws Exception {
         var planks = Ingredient.of(Items.DARK_OAK_PLANKS, Items.OAK_PLANKS);
         var chestRecipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of('P', planks), "PPP", "P P", "PPP"),

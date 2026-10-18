@@ -1,4 +1,2 @@
-- Item choices now save per-pattern locks, with an Any accepted item reset.
-- Enforce locked root inputs during AE2 planning and execution; filter generated dependencies by saved choices.
-- Added JEI crafting and machine recipe previews with full recipe viewer access.
-- Keep editor sessions intact while visiting JEI.
+- Restore orange missing-source explanations for direct inputs of recursive patterns.
+- Explain flexible missing inputs when the selected source is unambiguous.

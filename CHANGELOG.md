@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0-beta.14
+
+- Restore orange missing-source explanations for direct inputs of recursive patterns.
+- Explain flexible missing inputs when the selected source is unambiguous.
+
 ## 1.2.0-beta.13
 
 - Item choices now save per-pattern locks, with an Any accepted item reset.

@@ -27,11 +27,20 @@ public final class PlanExplanation {
         for (boolean missingPass : new boolean[]{true, false}) {
             for (var use : plan.patternTimes().entrySet()) {
                 var pattern = use.getKey();
-                if (use.getValue() <= 0 || !GENERATED.containsKey(pattern)) continue;
+                if (use.getValue() <= 0 || (!GENERATED.containsKey(pattern)
+                        && !PatternUtil.isRecursive(pattern.getDefinition().toStack()))) continue;
                 for (var input : pattern.getInputs()) {
-                    // Flexible inputs do not reveal which alternative AE2 consumed.
-                    // Generated exact variants can be attributed without guessing.
-                    if (input.getPossibleInputs().length != 1) continue;
+                    // A single missing alternative is identifiable only when no other
+                    // accepted alternative occurs anywhere in the selected plan.
+                    if (input.getPossibleInputs().length != 1) {
+                        Set<AEKey> observed = new HashSet<>();
+                        for (var possible : input.getPossibleInputs()) {
+                            var key = possible.what();
+                            if (plan.missingItems().get(key) > 0 || plan.usedItems().get(key) > 0
+                                    || crafted.contains(key) || plan.emittedItems().get(key) > 0) observed.add(key);
+                        }
+                        if (observed.size() != 1 || plan.missingItems().get(observed.iterator().next()) <= 0) continue;
+                    }
                     for (var possible : input.getPossibleInputs()) {
                         var source = possible.what();
                         boolean missing = plan.missingItems().get(source) > 0;
