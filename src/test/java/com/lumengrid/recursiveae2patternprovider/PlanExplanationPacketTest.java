@@ -24,7 +24,8 @@ class PlanExplanationPacketTest {
     @Test
     void explanationsAndClearPacketRoundTrip(MinecraftServer server) {
         Map<AEKey, List<AEKey>> sources = Map.of(AEItemKey.of(Items.LEATHER_HELMET), List.of(AEItemKey.of(Items.GLOWSTONE_DUST)));
-        for (var expected : List.of(new PlanExplanationS2CPacket(7, sources), new PlanExplanationS2CPacket(7, Map.of()))) {
+        Map<AEKey, List<AEKey>> origins = Map.of(AEItemKey.of(Items.LEATHER_HELMET), List.of(AEItemKey.of(Items.CLOCK)));
+        for (var expected : List.of(new PlanExplanationS2CPacket(7, sources, origins), new PlanExplanationS2CPacket(7, Map.of()))) {
             var buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), server.registryAccess());
             try {
                 PlanExplanationS2CPacket.STREAM_CODEC.encode(buf, expected);

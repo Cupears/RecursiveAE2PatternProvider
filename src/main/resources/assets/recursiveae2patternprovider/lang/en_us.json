@@ -2,6 +2,7 @@
   "gui.recursiveae2patternprovider.plan.hover_hint": "Partial plan: hover missing items for help",
   "gui.recursiveae2patternprovider.plan.source": "Missing source in the selected recipe path",
   "gui.recursiveae2patternprovider.plan.produces": "Used to make: %s",
+  "gui.recursiveae2patternprovider.plan.pattern": "From pattern: %s",
   "recursiveae2patternprovider.configuration.title": "Recursive AE2 Pattern Provider",
   "recursiveae2patternprovider.configuration.section.recursiveae2patternprovider.common.toml": "Recursive AE2 Pattern Provider Configs",
   "recursiveae2patternprovider.configuration.section.recursiveae2patternprovider.common.toml.title": "Recursive AE2 Pattern Provider Configs",

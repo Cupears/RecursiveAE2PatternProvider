@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0-beta.15
+
+- Added an orange From pattern line identifying the stored recursive pattern behind a crafting-plan ingredient.
+- Track pattern origins through generated dependencies and shared recipe paths.
+
 ## 1.2.0-beta.14
 
 - Restore orange missing-source explanations for direct inputs of recursive patterns.

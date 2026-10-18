@@ -1,2 +1,2 @@
-- Restore orange missing-source explanations for direct inputs of recursive patterns.
-- Explain flexible missing inputs when the selected source is unambiguous.
+- Added an orange From pattern line identifying the stored recursive pattern behind a crafting-plan ingredient.
+- Track pattern origins through generated dependencies and shared recipe paths.

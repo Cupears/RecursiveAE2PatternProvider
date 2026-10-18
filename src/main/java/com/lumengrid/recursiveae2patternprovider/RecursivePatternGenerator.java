@@ -91,6 +91,7 @@ public final class RecursivePatternGenerator {
         final List<IPatternDetails> generated = new ArrayList<>();
         final RecipeSelection selection;
         Map<String, String> ingredientLocks = Map.of();
+        List<AEKey> rootOutputs = List.of();
 
         Context(Level level, int maxDepth, Map<Item, List<RecipeHolder<CraftingRecipe>>> index, Settings settings) {
             this.level = level;
@@ -227,6 +228,7 @@ public final class RecursivePatternGenerator {
             if (existingPatterns != null) for (var existing : existingPatterns) markOutputsProcessed(existing, ctx);
             for (var root : recursivePatterns) markOutputsProcessed(root, ctx);
             for (var root : group.getValue()) {
+                ctx.rootOutputs = root.getOutputs().stream().map(output -> output.what()).toList();
                 List<Item> rootOutputs = new ArrayList<>();
                 for (var output : root.getOutputs()) {
                     if (output.what() instanceof AEItemKey key && ctx.ancestors.add(key.getItem())) rootOutputs.add(key.getItem());
@@ -344,7 +346,7 @@ public final class RecursivePatternGenerator {
                         AECraftingPattern aePattern = encodePattern(recipe, inputs, recipeOutput, parentPattern, ctx.level, !locks.isEmpty());
                         if (aePattern == null || aePattern.getOutputs() == null || aePattern.getOutputs().isEmpty()) continue;
                         ctx.generated.add(aePattern);
-                        PlanExplanation.registerGenerated(aePattern);
+                        PlanExplanation.registerGenerated(aePattern, ctx.rootOutputs);
                         created++;
                         ctx.processedRecipes.add(recipe.id().toString());
 

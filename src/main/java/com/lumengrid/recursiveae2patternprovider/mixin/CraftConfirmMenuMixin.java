@@ -20,6 +20,10 @@ public abstract class CraftConfirmMenuMixin implements IPlanExplanationMenu {
     @Shadow private CraftingPlanSummary plan;
     @Unique private CraftingPlanSummary recursiveAE2$lastPlan;
     @Unique private Map<AEKey, List<AEKey>> recursiveAE2$explanation = Map.of();
+    @Unique private Map<AEKey, List<AEKey>> recursiveAE2$origins = Map.of();
+
+    public Map<AEKey, List<AEKey>> recursiveAE2$getOrigins() { return recursiveAE2$origins; }
+    public void recursiveAE2$setOrigins(Map<AEKey, List<AEKey>> origins) { recursiveAE2$origins = origins; }
 
     public Map<AEKey, List<AEKey>> recursiveAE2$getExplanation() { return recursiveAE2$explanation; }
     public void recursiveAE2$setExplanation(Map<AEKey, List<AEKey>> explanation) {
@@ -32,7 +36,8 @@ public abstract class CraftConfirmMenuMixin implements IPlanExplanationMenu {
         if (menu.getPlayer() instanceof ServerPlayer player && plan != recursiveAE2$lastPlan) {
             recursiveAE2$lastPlan = plan;
             var explanation = result != null && plan != null ? PlanExplanation.analyze(result) : Map.<AEKey, List<AEKey>>of();
-            PacketDistributor.sendToPlayer(player, new PlanExplanationS2CPacket(menu.containerId, explanation));
+            var origins = result != null && plan != null ? PlanExplanation.origins(result, explanation) : Map.<AEKey, List<AEKey>>of();
+            PacketDistributor.sendToPlayer(player, new PlanExplanationS2CPacket(menu.containerId, explanation, origins));
         }
     }
 
@@ -40,5 +45,6 @@ public abstract class CraftConfirmMenuMixin implements IPlanExplanationMenu {
     @Inject(method = "setPlan", at = @At("HEAD"))
     private void recursiveAE2$clearExplanation(CraftingPlanSummary newPlan, CallbackInfo ci) {
         recursiveAE2$explanation = Map.of();
+        recursiveAE2$origins = Map.of();
     }
 }

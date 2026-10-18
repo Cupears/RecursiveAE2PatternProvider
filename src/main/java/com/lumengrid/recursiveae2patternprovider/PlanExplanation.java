@@ -9,12 +9,78 @@ import java.util.*;
 public final class PlanExplanation {
     public static final int MAX_SOURCES = 256;
     public static final int MAX_PRODUCTS = 4;
-    private static final Map<IPatternDetails, Boolean> GENERATED = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<IPatternDetails, Set<AEKey>> GENERATED = Collections.synchronizedMap(new WeakHashMap<>());
 
     private PlanExplanation() {}
 
     public static void registerGenerated(IPatternDetails pattern) {
-        GENERATED.put(pattern, Boolean.TRUE);
+        registerGenerated(pattern, List.of());
+    }
+
+    public static void registerGenerated(IPatternDetails pattern, Collection<AEKey> roots) {
+        synchronized (GENERATED) {
+            var owners = new LinkedHashSet<>(GENERATED.getOrDefault(pattern, Set.of()));
+            for (var root : roots) if (owners.size() < MAX_PRODUCTS) owners.add(root);
+            GENERATED.put(pattern, Collections.unmodifiableSet(owners));
+        }
+    }
+
+    /** Stored pattern outputs that generated each source's selected dependency. */
+    public static Map<AEKey, List<AEKey>> origins(ICraftingPlan plan, Map<AEKey, List<AEKey>> sources) {
+        // Follow the selected plan to its stored recursive roots first. A shared
+        // generated recipe can be used by a different root than created it first.
+        Map<AEKey, Set<AEKey>> consumers = new HashMap<>();
+        Set<AEKey> selectedRoots = new HashSet<>();
+        for (var use : plan.patternTimes().entrySet()) {
+            if (use.getValue() <= 0) continue;
+            var pattern = use.getKey();
+            for (var output : pattern.getOutputs()) {
+                if (PatternUtil.isRecursive(pattern.getDefinition().toStack())) selectedRoots.add(output.what());
+                for (var input : pattern.getInputs()) {
+                    if (input.getPossibleInputs().length == 1) {
+                        consumers.computeIfAbsent(input.getPossibleInputs()[0].what(), ignored -> new LinkedHashSet<>()).add(output.what());
+                    }
+                }
+            }
+        }
+        Map<AEKey, LinkedHashSet<AEKey>> owners = new LinkedHashMap<>();
+        for (var use : plan.patternTimes().entrySet()) {
+            if (use.getValue() <= 0) continue;
+            var pattern = use.getKey();
+            Set<AEKey> roots = GENERATED.getOrDefault(pattern, Set.of());
+            if (PatternUtil.isRecursive(pattern.getDefinition().toStack())) {
+                roots = new LinkedHashSet<>(roots);
+                for (var output : pattern.getOutputs()) roots.add(output.what());
+            }
+            if (!selectedRoots.isEmpty()) {
+                roots = new LinkedHashSet<>(roots);
+                roots.retainAll(selectedRoots);
+            }
+            if (roots.isEmpty()) continue;
+            for (var input : pattern.getInputs()) for (var possible : input.getPossibleInputs()) {
+                var source = possible.what();
+                var products = sources.get(source);
+                if (products == null || pattern.getOutputs().stream().noneMatch(output -> products.contains(output.what()))) continue;
+                var result = owners.computeIfAbsent(source, ignored -> new LinkedHashSet<>());
+                for (var root : roots) if (result.size() < MAX_PRODUCTS) result.add(root);
+            }
+        }
+        for (var source : sources.keySet()) {
+            Set<AEKey> visited = new HashSet<>();
+            var pending = new ArrayDeque<AEKey>();
+            pending.add(source);
+            LinkedHashSet<AEKey> roots = new LinkedHashSet<>();
+            while (!pending.isEmpty()) {
+                var key = pending.removeFirst();
+                if (!visited.add(key)) continue;
+                if (selectedRoots.contains(key) && !source.equals(key) && roots.size() < MAX_PRODUCTS) roots.add(key);
+                pending.addAll(consumers.getOrDefault(key, Set.of()));
+            }
+            if (!roots.isEmpty()) owners.put(source, roots);
+        }
+        Map<AEKey, List<AEKey>> result = new LinkedHashMap<>();
+        owners.forEach((source, roots) -> result.put(source, List.copyOf(roots)));
+        return Collections.unmodifiableMap(result);
     }
 
     public static Map<AEKey, List<AEKey>> analyze(ICraftingPlan plan) {

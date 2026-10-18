@@ -162,6 +162,32 @@ class AvailableRecipePlanningTest {
         assertTrue(plan.simulation());
         assertEquals(List.of(AEItemKey.of(Items.GOLD_INGOT)),
                 PlanExplanation.analyze(plan).get(AEItemKey.of(Items.GOLD_BLOCK)));
+        assertEquals(List.of(AEItemKey.of(Items.GOLD_INGOT)),
+                PlanExplanation.origins(plan, PlanExplanation.analyze(plan)).get(AEItemKey.of(Items.GOLD_BLOCK)));
+    }
+
+    @Test
+    void sourceOriginFollowsSelectedRootRatherThanFirstGenerator(MinecraftServer server) throws Exception {
+        var ingots = processing(List.of(new GenericStack(AEItemKey.of(Items.GOLD_BLOCK), 1)), Items.GOLD_INGOT, 9);
+        PlanExplanation.registerGenerated(ingots, List.of(AEItemKey.of(Items.COMPASS)));
+        var stack = PatternDetailsHelper.encodeProcessingPattern(
+                List.of(new GenericStack(AEItemKey.of(Items.GOLD_INGOT), 9)),
+                List.of(new GenericStack(AEItemKey.of(Items.CLOCK), 1)));
+        PatternUtil.setRecursive(stack, true);
+        var root = new AEProcessingPattern(AEItemKey.of(stack));
+        var plan = calculate(List.of(root, ingots), Map.of(), Items.CLOCK, 1);
+        var sources = PlanExplanation.analyze(plan);
+        assertEquals(List.of(AEItemKey.of(Items.GOLD_INGOT)), sources.get(AEItemKey.of(Items.GOLD_BLOCK)));
+        assertEquals(List.of(AEItemKey.of(Items.CLOCK)), PlanExplanation.origins(plan, sources).get(AEItemKey.of(Items.GOLD_BLOCK)));
+    }
+
+    @Test
+    void directlyRequestedDependencyRetainsStoredPatternOrigin(MinecraftServer server) throws Exception {
+        var ingots = processing(List.of(new GenericStack(AEItemKey.of(Items.COPPER_BLOCK), 1)), Items.COPPER_INGOT, 9);
+        PlanExplanation.registerGenerated(ingots, List.of(AEItemKey.of(Items.CLOCK)));
+        var plan = calculate(List.of(ingots), Map.of(), Items.COPPER_INGOT, 9);
+        assertEquals(List.of(AEItemKey.of(Items.CLOCK)),
+                PlanExplanation.origins(plan, PlanExplanation.analyze(plan)).get(AEItemKey.of(Items.COPPER_BLOCK)));
     }
 
     @Test

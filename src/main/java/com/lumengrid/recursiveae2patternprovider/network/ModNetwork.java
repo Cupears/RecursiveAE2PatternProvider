@@ -5,7 +5,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 public class ModNetwork {
     public static void registerPayloadHandlers(final RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("8");
+        var registrar = event.registrar("9");
         registrar.playToServer(RecipeTreePackets.Defaults.TYPE, RecipeTreePackets.Defaults.CODEC, RecipeTreePackets.Defaults::handle);
         registrar.playToServer(RecipeTreePackets.RequestOpen.TYPE, RecipeTreePackets.RequestOpen.CODEC, RecipeTreePackets.RequestOpen::handle);
         registrar.playToClient(RecipeTreePackets.Branch.TYPE, RecipeTreePackets.Branch.CODEC, RecipeTreePackets.Branch::handle);
