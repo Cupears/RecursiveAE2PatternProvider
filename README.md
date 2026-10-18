@@ -19,7 +19,7 @@ I maintain this fork of [Lumengrid's Recursive AE2 Pattern Provider](https://git
 
 ## Install
 
-1. Download `otter-patterns-1.2.0-beta.12.jar` from Releases.
+1. Download `otter-patterns-1.2.0-beta.13.jar` from Releases.
 2. Close Minecraft and stop the server before replacing an older version.
 3. If updating, remove the previous `otter-patterns-*.jar` from `mods`.
 4. Put the new JAR in the client and server `mods` folders, or just the client folder for single-player, then launch again.
@@ -64,7 +64,9 @@ Use the mouse wheel to zoom toward the cursor, drag the empty canvas to pan, and
 
 I save up to 128 exact recipe exclusions on the encoded pattern. They survive copying, saving, and re-encoding. This filters dependencies generated for that pattern; AE2's shared network can still use manually supplied patterns or routes offered by other recursive patterns/providers.
 
-Blocked recipe paths collapse immediately. Compressed-block routes start collapsed and remain available to expand. Accepted alternatives for each ingredient share a choice card, including glass and modded tags. Click **Choices** to see alternatives together in a searchable icon grid; selecting an item inspects its paths without locking the recipe. Separate required ingredients stay separate. Similar recipe routes also share compact cards: collapsed previews cycle, pause while hovered, and offer `<` / `>` controls to inspect each type. Grouping affects the view only; bans still target the displayed recipe ID.
+Blocked recipe paths collapse immediately. Compressed-block routes start collapsed and remain available to expand. Accepted alternatives for each ingredient share a choice card, including glass and modded tags. Click **Choices** to see alternatives in a searchable icon grid. Selecting an item locks that ingredient for this pattern; **Any accepted item** removes the lock. **Save** keeps changes and **Cancel** discards them. Separate required ingredients stay separate. Similar recipe routes also share compact cards: collapsed previews cycle, pause while hovered, and offer `<` / `>` controls to inspect each type. Recipe bans still target the displayed recipe ID.
+
+Hover an item in Choices to preview its JEI crafting or machine recipes. Use the preview arrows to compare recipes, or **JEI recipes** to open the full viewer. Machine previews do not create processing patterns. Root ingredient locks constrain planning and execution, and nested choices restrict this pattern's generated dependency routes. Existing network patterns remain independent and can still supply intermediate items. Changing the encoded recipe or grid clears root slot locks; recipe-specific dependency locks stay attached.
 
 My personal blacklist is saved in `config/otter-patterns-recipe-defaults.json` on my client. Newly encoded recursive patterns inherit it in either supported terminal. Existing patterns retain their saved overrides when re-encoded. Removing a remembered recipe through Defaults affects future patterns; Reset rules affects the pattern being edited.
 

@@ -167,7 +167,9 @@ public final class EditorSmoke {
                 }
             } else if (phase == 31 && ticks - since > 0) {
                 check(((Map<Integer, List<Integer>>)field("groupMembers")).get(earlyRecipe).size() == 1, "Late type arrived before selection check");
-                mc.screen.mouseClicked(new MouseButtonEvent(40, 80, new MouseButtonInfo(0, 0)), false); next(9);
+                focusNode(earlyRecipe);
+                mc.screen.mouseClicked(new MouseButtonEvent(40, 80, new MouseButtonInfo(0, 0)), false);
+                check((int)field("selected") == earlyRecipe, "Early branch click missed its card"); next(9);
             } else if (phase == 9 && mc.screen instanceof RecipeTreeScreen && ticks - since > 80 && treeIdle()) {
                 record("Terminal button opened tree; all branches loaded automatically");
                 shot("recipe-tree-root");
@@ -374,12 +376,19 @@ public final class EditorSmoke {
                 check((int)field("choosingGroup") == selectedChoiceGroup, "Choices button did not open ingredient picker");
                 next(39);
             } else if (phase == 39 && ticks - since > 10) {
+                if (Boolean.getBoolean("otter.smokeJei")) {
+                    check(com.lumengrid.recursiveae2patternprovider.client.RecipePreviewBridge.available(), "JEI preview provider was not registered");
+                    var previews = com.lumengrid.recursiveae2patternprovider.client.RecipePreviewBridge.previews(new ItemStack(Items.GLASS));
+                    check(previews.stream().anyMatch(p -> p.processing()), "JEI machine/smelting previews were missing");
+                    record("JEI returned machine recipes alongside crafting previews");
+                }
                 shot("recipe-ingredient-choices");
                 var search = (net.minecraft.client.gui.components.EditBox)field("choicesSearch"); search.setValue("tinted");
                 mc.screen.mouseClicked(new MouseButtonEvent(screenInt("choicesX") + 22, screenInt("choicesY") + 82, new MouseButtonInfo(0, 0)), false);
                 check((int)field("choosingGroup") == -1, "Selecting a choice did not close picker");
                 var nodes = (List<RecipeTree.Node>)field("nodes");
                 check(nodes.get(displayNode(selectedChoiceGroup)).item().is(Items.TINTED_GLASS), "Picker search selected the wrong item");
+                check(((Map<String, String>)field("ingredientLocks")).containsValue("minecraft:tinted_glass"), "Picker did not create an ingredient lock");
                 check(((Set<Integer>)field("expanded")).contains(selectedChoiceGroup), "Selected ingredient path did not expand");
                 record("Ingredient picker showed alternatives together and searched/selected a glass variant"); next(35);
             } else if (phase == 35 && ticks - since > 10) {
@@ -414,6 +423,7 @@ public final class EditorSmoke {
                 record("Blacklist search, explicit remove buttons, scrolling, Escape and modal input isolation passed");
                 clickButton("Cancel"); next(40);
             } else if (phase == 40 && ticks - since > 20) {
+                check(PatternIngredientLocks.read(terminalPattern()).isEmpty(), "Cancel saved the pending glass lock");
                 var server = mc.getSingleplayerServer(); server.execute(() -> {
                     try {
                         var player = server.getPlayerList().getPlayers().getFirst(); var manager = server.getRecipeManager();
@@ -446,6 +456,38 @@ public final class EditorSmoke {
                 var nodes = (List<RecipeTree.Node>)field("nodes");
                 check(nodes.get(displayNode(selectedChoiceGroup)).item().is(Items.WHITE_WOOL), "Wool picker did not select white wool");
                 record("Dye-first orange-wool pattern offered all wool colors, marked its cycle and selected white wool");
+                clickButton("Save"); next(45);
+            } else if (phase == 45 && !(mc.screen instanceof RecipeTreeScreen) && ticks - since > 20) {
+                var locks = PatternIngredientLocks.read(terminalPattern());
+                check(locks.containsValue("minecraft:white_wool"), "Chosen wool lock did not persist on pattern");
+                clickTreeButton(); next(46);
+            } else if (phase == 46 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
+                var nodes = (List<RecipeTree.Node>)field("nodes"); var groups = (Map<Integer, List<Integer>>)field("groupMembers");
+                var roots = ((Map<Integer, List<Integer>>)field("groupedChildren")).get(0);
+                selectedChoiceGroup = roots.stream().filter(id -> nodes.get(id).item().is(net.minecraft.tags.ItemTags.WOOL)).findFirst().orElseThrow();
+                check(groups.get(selectedChoiceGroup).size() == 16, "Locked pattern could not show its other choices for editing");
+                check(((Map<String, String>)field("ingredientLocks")).containsValue("minecraft:white_wool"), "Reopening lost saved lock");
+                focusNode(selectedChoiceGroup); next(47);
+            } else if (phase == 47 && ticks - since > 10) {
+                focusNode(selectedChoiceGroup);
+                mc.screen.mouseClicked(new MouseButtonEvent(45, 152, new MouseButtonInfo(0, 0)), false);
+                check((int)field("choosingGroup") == selectedChoiceGroup, "Saved lock could not reopen picker");
+                clickButton("Any accepted item"); check(((Map<?, ?>)field("ingredientLocks")).isEmpty(), "Any accepted item did not clear lock");
+                clickButton("Save"); next(48);
+            } else if (phase == 48 && !(mc.screen instanceof RecipeTreeScreen) && ticks - since > 20) {
+                check(PatternIngredientLocks.read(terminalPattern()).isEmpty(), "Cleared ingredient lock did not persist");
+                record("Item lock saved on server, reopened with full choices, and cleared with Any accepted item");
+                if (Boolean.getBoolean("otter.smokeJei")) { clickTreeButton(); next(49); }
+                else finish(mc, "PASS");
+            } else if (phase == 49 && mc.screen instanceof RecipeTreeScreen && ticks - since > 20) {
+                com.lumengrid.recursiveae2patternprovider.client.RecipePreviewBridge.show(new ItemStack(Items.GLASS)); next(50);
+            } else if (phase == 50 && ticks - since > 10) {
+                check(!(mc.screen instanceof RecipeTreeScreen), "Full JEI recipe viewer did not open");
+                mc.screen.onClose(); next(51);
+            } else if (phase == 51 && ticks - since > 10) {
+                check(mc.screen instanceof RecipeTreeScreen, "JEI did not return to the editor");
+                check(!(boolean)field("invalidSession"), "JEI preview invalidated editor session");
+                record("Full JEI recipe viewer returned to the active editor session");
                 clickButton("Cancel"); finish(mc, "PASS");
             }
         } catch (Throwable e) {

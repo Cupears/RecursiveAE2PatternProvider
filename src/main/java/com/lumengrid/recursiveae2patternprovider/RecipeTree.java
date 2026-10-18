@@ -109,22 +109,8 @@ public record RecipeTree(List<Node> nodes, boolean truncated) {
         return new Branch(added, added.isEmpty() ? (IngredientChoices.replaced(task.item().getItem()) ? 3 : 1) : 0);
     }
     private static Map<List<Item>, Integer> ingredientChoices(CraftingRecipe recipe, ItemStack[] grid) {
-        var placement = recipe.placementInfo();
-        var ingredients = placement.ingredients();
         Map<List<Item>, Integer> requirements = new LinkedHashMap<>();
-        for (int slot = 0; slot < 9; slot++) {
-            if (grid[slot].isEmpty()) continue;
-            int index = slot;
-            if (recipe instanceof ShapedRecipe shaped) {
-                int x = slot % 3, y = slot / 3;
-                if (x >= shaped.getWidth() || y >= shaped.getHeight()) continue;
-                index = placement.slotsToIngredientIndex().getInt(y * shaped.getWidth() + x);
-            }
-            List<Item> choices = index >= 0 && index < ingredients.size()
-                    ? IngredientChoices.items(ingredients.get(index))
-                    : List.of(grid[slot].getItem());
-            if (!choices.isEmpty()) requirements.merge(choices, 1, Integer::sum);
-        }
+        for (var group : RecipeIngredientGroups.of(recipe, grid)) requirements.put(group.items(), group.slots().size());
         return requirements;
     }
     public static Page expand(List<Node> nodes, int parent, int offset, Level level) {

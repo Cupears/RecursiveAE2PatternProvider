@@ -16,6 +16,7 @@ import java.util.*;
 
 /** Server-authored recipe alternatives with explicit per-item save/cancel. */
 public final class RecipeTreeScreen extends Screen {
+    private static java.lang.ref.WeakReference<RecipeTreeScreen> activeEditor = new java.lang.ref.WeakReference<>(null);
     private static final int ORANGE = 0xFFFFC98A, CARD_WIDTH = 148, CARD_HEIGHT = 94;
     private final RecipeTreePackets.Open snapshot;
     private final Screen terminalScreen;
@@ -26,6 +27,7 @@ public final class RecipeTreeScreen extends Screen {
     private final ArrayDeque<Integer> loadQueue = new ArrayDeque<>();
     private boolean layoutDirty = true, centerOnRoot = true;
     private final Set<String> excluded;
+    private final Map<String, String> ingredientLocks;
     private final Set<String> originalDefaults;
     private final Set<String> personalDefaults = new HashSet<>();
     private boolean defaultsWritable = true, managingDefaults;
@@ -36,6 +38,8 @@ public final class RecipeTreeScreen extends Screen {
     private boolean defaultsDragging;
     private int choosingGroup = -1, choicesScroll;
     private EditBox choicesSearch;
+    private int previewItem = -1, previewIndex, previewGeneration = -1;
+    private final Map<appeng.api.stacks.AEItemKey, List<RecipePreviewBridge.Preview>> recipePreviews = new HashMap<>();
     private final Map<Integer, Integer> groupHeads = new HashMap<>();
     private final Map<Integer, List<Integer>> groupMembers = new HashMap<>();
     private final Map<Integer, Map<Object, Integer>> siblingGroups = new HashMap<>();
@@ -64,6 +68,8 @@ public final class RecipeTreeScreen extends Screen {
         this.terminalMenu = Minecraft.getInstance().player.containerMenu;
         this.nodes = new ArrayList<>(snapshot.tree().nodes());
         this.excluded = new HashSet<>(snapshot.excluded());
+        this.ingredientLocks = new TreeMap<>(snapshot.locks());
+        activeEditor = new java.lang.ref.WeakReference<>(this);
         try { personalDefaults.addAll(RecipeDefaults.load(ClientRecipeDefaults.path())); }
         catch (java.io.IOException e) { defaultsWritable = false; status = tr("defaults_error");
             RecursiveAE2PatternProvider.LOGGER.warn("Could not read personal recipe defaults", e); }
@@ -89,6 +95,7 @@ public final class RecipeTreeScreen extends Screen {
             groupedChildren.computeIfAbsent(node.parent(), ignored -> new ArrayList<>()).add(id);
             if (key != null) siblings.put(key, id);
         } else if (groupMembers.get(head).size() == 2 && !variantChoice.containsKey(head)) expanded.remove(head);
+        if (locked(node)) variantChoice.put(head, groupMembers.get(head).indexOf(id));
         if (!TreePresentation.compressed(node) && !(node.recipe() && excluded.contains(node.recipeId()))) expanded.add(id);
         if (id == 0 || node.recipe() || node.note() == 2 || node.item().isEmpty()) return;
         var previous = firstBranch.putIfAbsent(appeng.api.stacks.AEItemKey.of(node.item()), id);
@@ -96,6 +103,14 @@ public final class RecipeTreeScreen extends Screen {
         else sharedBranches.put(id, previous);
     }
     private int head(int id) { return groupHeads.getOrDefault(id, id); }
+    private boolean locked(RecipeTree.Node node) {
+        return !node.recipe() && node.choice() >= 0 && !node.item().isEmpty() && Objects.equals(ingredientLocks.get(PatternIngredientLocks.scope(nodes, node)),
+                net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(node.item().getItem()).toString());
+    }
+    private static RecipeTreeScreen currentEditor() {
+        var mc = Minecraft.getInstance(); var editor = mc.screen instanceof RecipeTreeScreen screen ? screen : activeEditor.get();
+        return editor != null && !editor.closed && mc.player != null && mc.player.containerMenu == editor.terminalMenu ? editor : null;
+    }
     private int displayed(int id) {
         int head = head(id);
         var members = groupMembers.getOrDefault(head, List.of(id));
@@ -132,7 +147,8 @@ public final class RecipeTreeScreen extends Screen {
     }
     public static void branch(RecipeTreePackets.Branch packet) {
         var mc = Minecraft.getInstance();
-        if (!(mc.screen instanceof RecipeTreeScreen screen) || !screen.snapshot.session().equals(packet.session())) return;
+        var screen = currentEditor();
+        if (screen == null || !screen.snapshot.session().equals(packet.session())) return;
         if (screen.invalidSession) return;
         if (packet.start() != screen.nodes.size() || !screen.pending.containsKey(packet.parent())) {
             screen.invalidSession = true; screen.status = tr("error"); screen.saveButton.active = false; screen.updateButtons(); return;
@@ -159,7 +175,8 @@ public final class RecipeTreeScreen extends Screen {
     }
     public static void result(RecipeTreePackets.Result result) {
         var mc = Minecraft.getInstance();
-        if (!(mc.screen instanceof RecipeTreeScreen screen) || !screen.snapshot.session().equals(result.session())) return;
+        var screen = currentEditor();
+        if (screen == null || !screen.snapshot.session().equals(result.session())) return;
         screen.waiting = false;
         if (result.saved()) {
             screen.closed = true;
@@ -190,7 +207,7 @@ public final class RecipeTreeScreen extends Screen {
         defaultsButton = addRenderableWidget(Button.builder(tr("defaults", personalDefaults.size()), b -> openDefaults())
                 .bounds(width - 112, 10, 100, 20).build(MenuButton::new));
         defaultsButton.active = defaultsWritable && !waiting;
-        addRenderableWidget(Button.builder(tr("reset_rules"), b -> { if (!waiting) { excluded.clear(); updateButtons(); } })
+        addRenderableWidget(Button.builder(tr("reset_rules"), b -> { if (!waiting) { excluded.clear(); ingredientLocks.clear(); updateButtons(); } })
                 .bounds(16 + w * 2, height - 27, w, 20).build(MenuButton::new));
         addRenderableWidget(Button.builder(tr("reset_view"), b -> { panY = 12; zoom = 1; centerOnRoot = true; layoutDirty = true; })
                 .bounds(20 + w * 3, height - 27, w, 20).build(MenuButton::new));
@@ -226,7 +243,7 @@ public final class RecipeTreeScreen extends Screen {
     private void save() {
         if (waiting || invalidSession) return;
         waiting = true; savingTicks = 0; saveButton.active = false; updateButtons(); status = tr("saving");
-        ClientPacketDistributor.sendToServer(new RecipeTreePackets.Save(snapshot.session(), true, Set.copyOf(excluded)));
+        ClientPacketDistributor.sendToServer(new RecipeTreePackets.Save(snapshot.session(), true, Set.copyOf(excluded), Map.copyOf(ingredientLocks)));
     }
     @Override public void onClose() {
         if (waiting) return;
@@ -303,6 +320,7 @@ public final class RecipeTreeScreen extends Screen {
     }
     private Component description(int id) {
         var node = nodes.get(id);
+        if (locked(node)) return tr("locked_item", node.item().getHoverName());
         int count = groupMembers.get(head(id)).size();
         if (node.choice() >= 0 && count > 1) return tr("ingredient_choice", count);
         return routeDescription(id);
@@ -491,12 +509,12 @@ public final class RecipeTreeScreen extends Screen {
     private int choicesHeight() {
         int count = groupMembers.getOrDefault(choosingGroup, List.of()).size();
         int rows = Math.max(1, (count + choicesColumns() - 1) / choicesColumns());
-        return Math.min(Math.min(260, height - 24), 114 + rows * 26);
+        return Math.min(Math.min(360, height - 24), 214 + rows * 26);
     }
     private int choicesX() { return (width - choicesWidth()) / 2; }
     private int choicesY() { return (height - choicesHeight()) / 2; }
     private int choicesColumns() { return Math.max(1, (choicesWidth() - 20) / 26); }
-    private int choicesRows() { return Math.max(1, (choicesHeight() - 114) / 26); }
+    private int choicesRows() { return Math.max(1, (choicesHeight() - 214) / 26); }
     private List<Integer> filteredChoices() {
         String query = choicesSearch == null ? "" : choicesSearch.getValue().strip().toLowerCase(Locale.ROOT);
         return groupMembers.getOrDefault(choosingGroup, List.of()).stream().filter(id -> {
@@ -506,13 +524,24 @@ public final class RecipeTreeScreen extends Screen {
         }).toList();
     }
     private void openChoices(int group) {
-        choosingGroup = head(group); choicesScroll = 0; dragging = false;
+        choosingGroup = head(group); choicesScroll = 0; dragging = false; previewItem = displayed(choosingGroup); previewIndex = 0;
         children().stream().filter(w -> w instanceof AbstractWidget).forEach(w -> ((AbstractWidget)w).visible = false);
         choicesSearch = new EditBox(font, choicesX() + 58, choicesY() + 43, choicesWidth() - 68, 18, tr("defaults_search"));
         choicesSearch.setMaxLength(256); choicesSearch.setResponder(value -> choicesScroll = 0);
         defaultsWidgets.add(addRenderableWidget(choicesSearch));
         defaultsWidgets.add(addRenderableWidget(Button.builder(tr("defaults_done"), b -> closeChoices())
                 .bounds(choicesX() + choicesWidth() - 90, choicesY() + choicesHeight() - 28, 80, 20).build(MenuButton::new)));
+        defaultsWidgets.add(addRenderableWidget(Button.builder(tr("choices_any"), b -> {
+            ingredientLocks.remove(PatternIngredientLocks.scope(nodes, nodes.get(displayed(choosingGroup)))); closeChoices();
+        }).bounds(choicesX() + 10, choicesY() + choicesHeight() - 28, 126, 20).build(MenuButton::new)));
+        var recipes = Button.builder(tr("choices_recipes"), b -> { if (previewItem >= 0) RecipePreviewBridge.show(nodes.get(previewItem).item()); })
+                .bounds(choicesX() + 142, choicesY() + choicesHeight() - 28, 78, 20).build(MenuButton::new);
+        recipes.active = RecipePreviewBridge.available(); recipes.visible = choicesWidth() >= 340; defaultsWidgets.add(addRenderableWidget(recipes));
+        int previewY = choicesY() + 70 + choicesRows() * 26 + 4;
+        defaultsWidgets.add(addRenderableWidget(Button.builder(Component.literal("<"), b -> previewIndex--)
+                .bounds(choicesX() + choicesWidth() - 49, previewY, 18, 16).build(MenuButton::new)));
+        defaultsWidgets.add(addRenderableWidget(Button.builder(Component.literal(">"), b -> previewIndex++)
+                .bounds(choicesX() + choicesWidth() - 29, previewY, 18, 16).build(MenuButton::new)));
         setFocused(choicesSearch);
     }
     private void closeChoices() {
@@ -539,20 +568,23 @@ public final class RecipeTreeScreen extends Screen {
         var ids = filteredChoices(); choicesScroll = Math.clamp(choicesScroll, 0, choicesMaxScroll());
         int start = choicesScroll * choicesColumns(), end = Math.min(ids.size(), start + choicesRows() * choicesColumns());
         int hover = choiceAt(mx, my), current = displayed(choosingGroup);
+        if (hover >= 0 && hover != previewItem) { previewItem = hover; previewIndex = 0; }
         for (int i = start; i < end; i++) {
             int id = ids.get(i), cellX = x + 10 + (i - start) % choicesColumns() * 26, cellY = y + 70 + (i - start) / choicesColumns() * 26;
             var node = nodes.get(id);
             panel(g, cellX, cellY, 24, 24, node.note() == 2 ? 0xFFC2ADA0 : id == hover ? 0xFFFFE4C3 : 0xFFF9E8D2);
-            if (id == current) g.outline(cellX, cellY, 24, 24, 0xFFFF962E);
+            if (locked(node)) g.outline(cellX, cellY, 24, 24, 0xFFFF962E);
             g.item(node.item(), cellX + 4, cellY + 4); g.itemDecorations(font, node.item(), cellX + 4, cellY + 4);
             if (node.note() == 2) g.text(font, "x", cellX + 17, cellY + 1, 0xFF9B3B26, false);
         }
         if (ids.isEmpty()) g.text(font, tr("defaults_no_results"), x + 10, y + 76, 0xFF614B35, false);
-        g.text(font, tr("choices_count", ids.size()), x + 10, y + h - 21, 0xFF614B35, false);
+        var countLabel = tr("choices_count", ids.size());
+        g.text(font, countLabel, x + w - 10 - font.width(countLabel), y + 10, 0xFF614B35, false);
         if (choicesMaxScroll() > 0) {
             int track = choicesRows() * 26, thumb = Math.max(12, track * choicesRows() / (choicesMaxScroll() + choicesRows()));
             panel(g, x + w - 8, y + 70 + (track - thumb) * choicesScroll / choicesMaxScroll(), 5, thumb, 0xFFFFBA6C);
         }
+        renderChoicePreview(g, mx, my);
         if (hover >= 0) {
             var node = nodes.get(hover); var lines = new ArrayList<Component>();
             lines.add(node.item().getHoverName());
@@ -561,13 +593,41 @@ public final class RecipeTreeScreen extends Screen {
             g.setComponentTooltipForNextFrame(font, lines, mx, my);
         }
     }
+    private void renderChoicePreview(GuiGraphicsExtractor g, int mx, int my) {
+        int x = choicesX() + 10, y = choicesY() + 70 + choicesRows() * 26 + 4;
+        int w = choicesWidth() - 20, h = choicesY() + choicesHeight() - 35 - y;
+        panel(g, x, y, w, h, 0xFFF9E8D2);
+        if (previewItem < 0) return;
+        var item = nodes.get(previewItem).item();
+        if (previewGeneration != RecipePreviewBridge.generation) { recipePreviews.clear(); previewGeneration = RecipePreviewBridge.generation; }
+        var previews = recipePreviews.computeIfAbsent(appeng.api.stacks.AEItemKey.of(item), key -> RecipePreviewBridge.previews(item));
+        g.text(font, shortened(item.getHoverName().getString(), w - 60), x + 6, y + 5, 0xFF392B20, false);
+        if (!previews.isEmpty()) {
+            var preview = previews.get(Math.floorMod(previewIndex, previews.size()));
+            var label = tr(preview.processing() ? "preview_processing" : "preview_crafting", preview.title(), Math.floorMod(previewIndex, previews.size()) + 1, previews.size());
+            g.text(font, shortened(label.getString(), w - 12), x + 6, y + 18, 0xFF614B35, false);
+            try { preview.draw().draw(g, x + 6, y + 31, w - 12, Math.max(1, h - 35), mx, my); }
+            catch (RuntimeException e) { g.text(font, tr("preview_failed"), x + 6, y + 31, 0xFF614B35, false); }
+        } else {
+            var recipes = children.getOrDefault(previewItem, List.of()).stream().filter(id -> nodes.get(id).recipe()).toList();
+            if (!recipes.isEmpty()) {
+                var recipe = nodes.get(recipes.get(Math.floorMod(previewIndex, recipes.size())));
+                g.text(font, shortened(recipe.recipeId(), w - 12), x + 6, y + 18, 0xFF614B35, false);
+                for (int i = 0; i < 9; i++) g.item(recipe.grid().get(i), x + 6 + i % 3 * 18, y + 31 + i / 3 * 18);
+            } else g.textWithWordWrap(font, tr(RecipePreviewBridge.available() ? "preview_none" : "preview_no_jei"), x + 6, y + 22, w - 12, 0xFF614B35, false);
+        }
+    }
     @Override public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (choosingGroup >= 0) {
             int choice = choiceAt(event.x(), event.y());
             if (event.button() == 0 && choice >= 0 && nodes.get(choice).note() != 2) {
+                String scope = PatternIngredientLocks.scope(nodes, nodes.get(choice));
+                if (!ingredientLocks.containsKey(scope) && ingredientLocks.size() >= PatternIngredientLocks.MAX_LOCKS) { status = tr("rule_limit"); return true; }
+                ingredientLocks.put(scope, net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(nodes.get(choice).item().getItem()).toString());
                 variantChoice.put(choosingGroup, groupMembers.get(choosingGroup).indexOf(choice));
                 selected = choice; expanded.add(choosingGroup); layoutDirty = true; closeChoices();
-            } else super.mouseClicked(event, doubleClick);
+            } else if (event.button() == 1 && choice >= 0) RecipePreviewBridge.show(nodes.get(choice).item());
+            else super.mouseClicked(event, doubleClick);
             return true;
         }
         if (managingDefaults) {

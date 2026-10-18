@@ -90,6 +90,7 @@ public final class RecursivePatternGenerator {
         final Set<Item> ancestors = new HashSet<>();
         final List<IPatternDetails> generated = new ArrayList<>();
         final RecipeSelection selection;
+        Map<String, String> ingredientLocks = Map.of();
 
         Context(Level level, int maxDepth, Map<Item, List<RecipeHolder<CraftingRecipe>>> index, Settings settings) {
             this.level = level;
@@ -211,16 +212,18 @@ public final class RecursivePatternGenerator {
             return new ArrayList<>();
         }
 
-        Map<Set<String>, List<IPatternDetails>> groups = new java.util.LinkedHashMap<>();
+        record Rules(Set<String> excluded, Map<String, String> locks) {}
+        Map<Rules, List<IPatternDetails>> groups = new java.util.LinkedHashMap<>();
         for (var root : recursivePatterns) {
             var rules = PatternRecipeRules.read(root.getDefinition().toStack());
-            groups.computeIfAbsent(rules, ignored -> new ArrayList<>()).add(root);
+            groups.computeIfAbsent(new Rules(rules, PatternIngredientLocks.read(root.getDefinition().toStack())), ignored -> new ArrayList<>()).add(root);
         }
         Set<IPatternDetails> allGenerated = new java.util.LinkedHashSet<>();
         var settings = Settings.fromConfig();
         var index = getRecipeIndex(level);
         for (var group : groups.entrySet()) {
-            Context ctx = new Context(level, maxDepth, index, settings.withExclusions(group.getKey()));
+            Context ctx = new Context(level, maxDepth, index, settings.withExclusions(group.getKey().excluded()));
+            ctx.ingredientLocks = group.getKey().locks();
             if (existingPatterns != null) for (var existing : existingPatterns) markOutputsProcessed(existing, ctx);
             for (var root : recursivePatterns) markOutputsProcessed(root, ctx);
             for (var root : group.getValue()) {
@@ -331,13 +334,14 @@ public final class RecursivePatternGenerator {
 
                 ItemStack[] original = getRecipeInputsAs3x3Grid(recipe.value());
                 int remaining = (ctx.settings.retainAlternatives() ? 64 : ctx.settings.maxAlternativesPerItem()) - created;
-                List<ItemStack[]> variants = Config.GENERATED_INGREDIENT_ALTERNATIVES.get()
-                        ? RecipeInputVariants.generate(recipe.value(), original, recipeOutput, ctx.level, remaining)
+                var locks = PatternIngredientLocks.forRecipe(ctx.ingredientLocks, recipe.id().identifier().toString());
+                List<ItemStack[]> variants = Config.GENERATED_INGREDIENT_ALTERNATIVES.get() || !locks.isEmpty()
+                        ? RecipeInputVariants.generate(recipe.value(), original, recipeOutput, ctx.level, remaining, locks)
                         : java.util.Collections.singletonList(original);
                 for (ItemStack[] inputs : variants) {
                     if (shouldSkipDependency(inputs, targetType, ctx.ancestors, ctx.settings.retainAlternatives())) continue;
                     try {
-                        AECraftingPattern aePattern = encodePattern(recipe, inputs, recipeOutput, parentPattern, ctx.level);
+                        AECraftingPattern aePattern = encodePattern(recipe, inputs, recipeOutput, parentPattern, ctx.level, !locks.isEmpty());
                         if (aePattern == null || aePattern.getOutputs() == null || aePattern.getOutputs().isEmpty()) continue;
                         ctx.generated.add(aePattern);
                         PlanExplanation.registerGenerated(aePattern);
@@ -365,8 +369,9 @@ public final class RecursivePatternGenerator {
 
     private static AECraftingPattern encodePattern(RecipeHolder<CraftingRecipe> recipe, ItemStack[] inputs,
                                                    ItemStack output, IPatternDetails parentPattern,
-                                                   Level level) {
+                                                   Level level, boolean locked) {
         ItemStack patternStack = encodePatternStack(recipe, inputs, output, parentPattern);
+        if (locked) AECraftingPattern.encode(patternStack, recipe, inputs, output, false, false);
         return new AECraftingPattern(Objects.requireNonNull(AEItemKey.of(patternStack)), level);
     }
 

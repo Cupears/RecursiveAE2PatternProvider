@@ -6,6 +6,8 @@
   "mixins": [
     "CraftingServiceMixin",
     "ShapelessPatternIngredientsMixin",
+    "LockedCraftingPatternMixin",
+    "LockedCraftingInputMixin",
     "CraftConfirmMenuMixin",
     "PatternProviderLogicMixin",
     "PatternEncodingTermMenuMixin",

@@ -24,6 +24,86 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(EphemeralTestServerProvider.class)
 class RecipeTreeEditorTest {
+    @Test void rootItemLockControlsPlanningAndExecutionAndCanBeRemoved(MinecraftServer server) throws Exception {
+        var recipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of('G', Ingredient.of(Items.GLASS, Items.TINTED_GLASS)), "GG"), new ItemStackTemplate(Items.CHEST));
+        var holder = new RecipeHolder<CraftingRecipe>(ResourceKey.create(Registries.RECIPE, Identifier.parse("test:lock_glass")), recipe);
+        withRecipes(server, List.of(holder), () -> {
+            var level = recipeLevel(server); var inputs = new ItemStack[9]; Arrays.fill(inputs, ItemStack.EMPTY);
+            inputs[0] = new ItemStack(Items.GLASS); inputs[1] = new ItemStack(Items.GLASS);
+            var encoded = PatternDetailsHelper.encodeCraftingPattern(holder, inputs, new ItemStack(Items.CHEST), true, false);
+            var raw = new appeng.crafting.pattern.AECraftingPattern(AEItemKey.of(encoded), level);
+            var logical = Map.of("root#0", "minecraft:tinted_glass");
+            var physical = PatternIngredientLocks.physical(logical, raw);
+            assertEquals(Map.of("root/0", "minecraft:tinted_glass", "root/1", "minecraft:tinted_glass"), physical);
+            assertTrue(PatternIngredientLocks.validRootCombination(raw, physical, level));
+            PatternIngredientLocks.write(encoded, physical);
+            var reencoded = PatternDetailsHelper.encodeCraftingPattern(holder, inputs, new ItemStack(Items.CHEST), true, false);
+            PatternRecipeRules.copy(encoded, reencoded); assertEquals(physical, PatternIngredientLocks.read(reencoded));
+            var movedInputs = new ItemStack[9]; Arrays.fill(movedInputs, ItemStack.EMPTY);
+            movedInputs[3] = new ItemStack(Items.GLASS); movedInputs[4] = new ItemStack(Items.GLASS);
+            var moved = PatternDetailsHelper.encodeCraftingPattern(holder, movedInputs, new ItemStack(Items.CHEST), true, false);
+            PatternRecipeRules.copy(encoded, moved); assertTrue(PatternIngredientLocks.read(moved).isEmpty());
+            var locked = new appeng.crafting.pattern.AECraftingPattern(AEItemKey.of(encoded), level);
+            assertEquals(logical, PatternIngredientLocks.logical(encoded, raw));
+            assertTrue(Arrays.stream(locked.getInputs()[0].getPossibleInputs()).allMatch(c -> ((AEItemKey)c.what()).getItem() == Items.TINTED_GLASS));
+            assertFalse(locked.getInputs()[0].isValid(AEItemKey.of(Items.GLASS), level));
+            assertFalse(locked.isItemValid(0, AEItemKey.of(Items.GLASS), level));
+            assertTrue(locked.isItemValid(0, AEItemKey.of(Items.TINTED_GLASS), level));
+            var planner = new AvailableRecipePlanningTest();
+            assertTrue(planner.calculate(List.of(locked), Map.of(Items.GLASS, 64L), Items.CHEST, 1).simulation());
+            assertFalse(planner.calculate(List.of(locked), Map.of(Items.TINTED_GLASS, 2L), Items.CHEST, 1).simulation());
+            var stock = new appeng.crafting.inv.ListCraftingInventory(ignored -> {});
+            stock.insert(AEItemKey.of(Items.GLASS), 64, appeng.api.config.Actionable.MODULATE);
+            assertNull(appeng.crafting.execution.CraftingCpuHelper.extractPatternInputs(locked, stock, null, new appeng.api.stacks.KeyCounter(), new appeng.api.stacks.KeyCounter()));
+            stock.insert(AEItemKey.of(Items.TINTED_GLASS), 2, appeng.api.config.Actionable.MODULATE);
+            assertNotNull(appeng.crafting.execution.CraftingCpuHelper.extractPatternInputs(locked, stock, null, new appeng.api.stacks.KeyCounter(), new appeng.api.stacks.KeyCounter()));
+            PatternIngredientLocks.write(encoded, Map.of());
+            var unlocked = new appeng.crafting.pattern.AECraftingPattern(AEItemKey.of(encoded), level);
+            assertFalse(planner.calculate(List.of(unlocked), Map.of(Items.GLASS, 2L), Items.CHEST, 1).simulation());
+        });
+    }
+    @Test void nestedLocksFilterGeneratedRoutesAndRemainLocalToTheirRoot(MinecraftServer server) throws Exception {
+        var recipe = new ShapedRecipe(null, null, ShapedRecipePattern.of(Map.of('G', Ingredient.of(Items.GLASS, Items.TINTED_GLASS)), "G"), new ItemStackTemplate(Items.CHEST));
+        var holder = new RecipeHolder<CraftingRecipe>(ResourceKey.create(Registries.RECIPE, Identifier.parse("test:nested_glass")), recipe);
+        withRecipes(server, List.of(holder), () -> {
+            var encoded = pattern(Items.CHEST, Items.CLOCK, Set.of());
+            var locks = Map.of("test:nested_glass#0", "minecraft:tinted_glass"); PatternIngredientLocks.write(encoded, locks);
+            var level = recipeLevel(server); var generated = RecursivePatternGenerator.generate(List.of(details(encoded)), level, -1);
+            assertTrue(consumes(generated, Items.TINTED_GLASS)); assertFalse(consumes(generated, Items.GLASS));
+            var free = details(pattern(Items.CHEST, Items.COMPASS, Set.of()));
+            assertTrue(consumes(RecursivePatternGenerator.generate(List.of(free), level, -1), Items.GLASS));
+            var combined = RecursivePatternGenerator.generate(List.of(details(encoded), free), level, -1);
+            assertTrue(consumes(combined, Items.GLASS)); assertTrue(consumes(combined, Items.TINTED_GLASS));
+            var copy = pattern(Items.CHEST, Items.CLOCK, Set.of()); PatternRecipeRules.copy(encoded, copy);
+            assertEquals(locks, PatternIngredientLocks.read(copy));
+        });
+    }
+    @Test void lockSaveRejectsForgedItemsScopesAndCycleChoices(MinecraftServer server) {
+        var nodes = List.of(new RecipeTree.Node(-1, false, new ItemStack(Items.CHEST), "", List.of(), 0),
+                new RecipeTree.Node(0, false, new ItemStack(Items.GLASS), "", List.of(), 0, 0),
+                new RecipeTree.Node(0, false, new ItemStack(Items.CHEST), "", List.of(), 2, 0));
+        assertTrue(PatternIngredientLocks.maySave(Map.of("root#0", "minecraft:glass"), Map.of(), nodes));
+        assertFalse(PatternIngredientLocks.maySave(Map.of("root#0", "minecraft:diamond"), Map.of(), nodes));
+        assertFalse(PatternIngredientLocks.maySave(Map.of("root#1", "minecraft:glass"), Map.of(), nodes));
+        assertFalse(PatternIngredientLocks.maySave(Map.of("root#0", "minecraft:chest"), Map.of(), nodes));
+        assertFalse(PatternIngredientLocks.maySave(Map.of("root/0", "minecraft:glass"), Map.of(), nodes));
+        assertTrue(PatternIngredientLocks.maySave(Map.of("test:unloaded#1", "minecraft:glass"), Map.of("test:unloaded#1", "minecraft:glass"), nodes));
+        var stack = pattern(Items.GLASS, Items.CHEST, Set.of());
+        PatternIngredientLocks.write(stack, Map.of("root/0", "minecraft:glass"));
+        assertTrue(PatternUtil.isRecursive(stack)); assertEquals("minecraft:glass", PatternIngredientLocks.read(stack).get("root/0"));
+        assertThrows(IllegalArgumentException.class, () -> PatternIngredientLocks.write(stack, Map.of("invalid", "minecraft:glass")));
+    }
+    @Test void ingredientLocksRoundTripThroughOpenAndSavePackets(MinecraftServer server) {
+        var locks = Map.of("root#0", "minecraft:glass", "test:craft#1", "minecraft:iron_ingot");
+        var tree = new RecipeTree(List.of(new RecipeTree.Node(-1, false, new ItemStack(Items.CHEST), "", List.of(), 0)), false);
+        var open = new RecipeTreePackets.Open(UUID.randomUUID(), tree, Set.of(), locks); var buf = buffer(server);
+        try {
+            RecipeTreePackets.Open.CODEC.encode(buf, open); assertEquals(locks, RecipeTreePackets.Open.CODEC.decode(buf).locks());
+            var save = new RecipeTreePackets.Save(open.session(), true, Set.of(), locks);
+            RecipeTreePackets.Save.CODEC.encode(buf, save); assertEquals(save, RecipeTreePackets.Save.CODEC.decode(buf));
+            assertEquals(0, buf.readableBytes());
+        } finally { buf.release(); }
+    }
     @Test void shapelessOverlappingIngredientsUseDistinctRoles(MinecraftServer server) {
         var recipe = new ShapelessRecipe(null, null, new ItemStackTemplate(Items.CLOCK), List.of(
                 Ingredient.of(Items.IRON_INGOT, Items.COPPER_INGOT), Ingredient.of(Items.COPPER_INGOT)));

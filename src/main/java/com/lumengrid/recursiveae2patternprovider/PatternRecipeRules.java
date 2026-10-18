@@ -42,10 +42,12 @@ public final class PatternRecipeRules {
 
     public static void copy(ItemStack oldPattern, ItemStack newPattern) {
         write(newPattern, read(oldPattern));
+        PatternIngredientLocks.copy(oldPattern, newPattern);
     }
 
     public static void copyOrDefault(ItemStack oldPattern, ItemStack newPattern, Set<String> defaults) {
         write(newPattern, oldPattern.isEmpty() ? defaults : read(oldPattern));
+        PatternIngredientLocks.copy(oldPattern, newPattern);
     }
 
     /** Changes may only affect IDs shown by the server or already saved on the item. */

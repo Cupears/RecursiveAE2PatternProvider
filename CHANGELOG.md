@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0-beta.13
+
+- Item choices now save per-pattern locks, with an Any accepted item reset.
+- Enforce locked root inputs during AE2 planning and execution; filter generated dependencies by saved choices.
+- Added JEI crafting and machine recipe previews with full recipe viewer access.
+- Keep editor sessions intact while visiting JEI.
+
 ## 1.2.0-beta.12
 
 - Added a searchable icon picker to view ingredient alternatives together.

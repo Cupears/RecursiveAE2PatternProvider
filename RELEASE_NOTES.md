@@ -1,3 +1,4 @@
-- Added a searchable icon picker to view ingredient alternatives together.
-- Fixed shapeless ingredient substitutions when transferred slots differ from recipe order.
-- Start ingredient previews on a non-cyclic choice and mark cyclic alternatives.
+- Item choices now save per-pattern locks, with an Any accepted item reset.
+- Enforce locked root inputs during AE2 planning and execution; filter generated dependencies by saved choices.
+- Added JEI crafting and machine recipe previews with full recipe viewer access.
+- Keep editor sessions intact while visiting JEI.

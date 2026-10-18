@@ -14,31 +14,23 @@ final class RecipeInputVariants {
 
     static List<ItemStack[]> generate(CraftingRecipe recipe, ItemStack[] original, ItemStack expected,
                                      Level level, int limit) {
+        return generate(recipe, original, expected, level, limit, Map.of());
+    }
+    static List<ItemStack[]> generate(CraftingRecipe recipe, ItemStack[] original, ItemStack expected,
+                                     Level level, int limit, Map<Integer, String> locks) {
         List<ItemStack[]> result = new ArrayList<>();
         if (limit <= 0) return result;
         var preferred = original.clone();
-        var placement = recipe.placementInfo();
-        Map<List<Item>, List<Integer>> groups = new LinkedHashMap<>();
-        var ingredients = placement.ingredients();
-        for (int slot = 0; slot < 9; slot++) {
-            int ingredientIndex;
-            if (recipe instanceof ShapedRecipe shaped) {
-                int x = slot % 3;
-                int y = slot / 3;
-                if (x >= shaped.getWidth() || y >= shaped.getHeight()) continue;
-                ingredientIndex = placement.slotsToIngredientIndex().getInt(y * shaped.getWidth() + x);
-            } else {
-                ingredientIndex = slot;
-            }
-            if (ingredientIndex < 0 || ingredientIndex >= ingredients.size()) continue;
-            var options = IngredientChoices.items(ingredients.get(ingredientIndex)).stream()
+        var choices = new ArrayList<Group>(); int groupId = 0;
+        for (var group : RecipeIngredientGroups.of(recipe, original)) {
+            String lock = locks.get(groupId++);
+            var options = group.items().stream().filter(item -> lock == null || BuiltInRegistries.ITEM.getKey(item).toString().equals(lock))
                     .sorted(Comparator.comparingInt((Item item) -> BuiltInRegistries.ITEM.getKey(item).getNamespace().equals("minecraft") ? 0 : 1)
                             .thenComparing(item -> BuiltInRegistries.ITEM.getKey(item).toString())).toList();
-            if (!options.isEmpty() && !options.contains(preferred[slot].getItem()))
-                preferred[slot] = new ItemStack(options.getFirst());
-            if (options.size() > 1) groups.computeIfAbsent(options, k -> new ArrayList<>()).add(slot);
+            if (options.isEmpty()) return result;
+            for (int slot : group.slots()) if (!options.contains(preferred[slot].getItem())) preferred[slot] = new ItemStack(options.getFirst());
+            if (options.size() > 1) choices.add(new Group(options, group.slots()));
         }
-        var choices = groups.entrySet().stream().map(e -> new Group(e.getKey(), e.getValue())).toList();
         addIfValid(recipe, preferred, expected, level, result);
         enumerate(recipe, preferred.clone(), expected, level, choices, 0, limit, new int[]{512}, result);
         return result;

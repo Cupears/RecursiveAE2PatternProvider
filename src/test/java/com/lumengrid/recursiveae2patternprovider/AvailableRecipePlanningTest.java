@@ -288,7 +288,7 @@ class AvailableRecipePlanningTest {
         return calculate(patterns, stock, Items.REDSTONE, amount);
     }
 
-    private ICraftingPlan calculate(List<IPatternDetails> patterns, Map<Item, Long> stock, Item output, long amount) throws Exception {
+    ICraftingPlan calculate(List<IPatternDetails> patterns, Map<Item, Long> stock, Item output, long amount) throws Exception {
         var inventory = new KeyCounter();
         stock.forEach((item, count) -> inventory.add(AEItemKey.of(item), count));
         var storage = stub(IStorageService.class, (name, args) -> switch (name) {

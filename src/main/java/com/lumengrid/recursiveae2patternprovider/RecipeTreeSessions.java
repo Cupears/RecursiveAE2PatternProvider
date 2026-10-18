@@ -12,7 +12,8 @@ import java.util.*;
 public final class RecipeTreeSessions {
     private record Session(UUID id, net.minecraft.world.inventory.AbstractContainerMenu menu, net.minecraft.world.inventory.Slot slot, ItemStack original,
                            Set<String> shown, Set<String> excluded, long opened, List<RecipeTree.Node> nodes, RecipeTree rootTree,
-                           Map<Integer, Integer> offsets, Set<Integer> complete, Map<Integer, RecipeTree.Branch> branches) {}
+                           Map<Integer, Integer> offsets, Set<Integer> complete, Map<Integer, RecipeTree.Branch> branches,
+                           appeng.api.crafting.IPatternDetails raw, Map<String, String> locks) {}
     private static final Map<ServerPlayer, Session> SESSIONS = new WeakHashMap<>();
     private static final Map<ServerPlayer, Long> LAST_OPEN = new WeakHashMap<>();
     private RecipeTreeSessions() {}
@@ -42,14 +43,16 @@ public final class RecipeTreeSessions {
         LAST_OPEN.put(player, now);
         var stack = slot.getItem();
         try {
-            var details = PatternDetailsHelper.decodePattern(stack, player.level());
+            var rawStack = stack.copy(); PatternIngredientLocks.write(rawStack, Map.of());
+            var details = PatternDetailsHelper.decodePattern(rawStack, player.level());
             if (details == null) return;
             var tree = RecipeTree.build(details, player.level());
             var exclusions = PatternRecipeRules.read(stack);
             var session = new Session(UUID.randomUUID(), menu, slot,
-                    stack.copy(), new HashSet<>(), exclusions, now, new ArrayList<>(tree.opening().nodes()), tree, new HashMap<>(), new HashSet<>(), new HashMap<>());
+                    stack.copy(), new HashSet<>(), exclusions, now, new ArrayList<>(tree.opening().nodes()), tree, new HashMap<>(), new HashSet<>(), new HashMap<>(),
+                    details, PatternIngredientLocks.logical(stack, details));
             SESSIONS.put(player, session);
-            PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Open(session.id(), tree.opening(), exclusions));
+            PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Open(session.id(), tree.opening(), exclusions, session.locks()));
         } catch (RuntimeException e) {
             RecursiveAE2PatternProvider.LOGGER.warn("Could not open recipe tree", e);
             player.sendOverlayMessage(Component.translatable("gui.recursiveae2patternprovider.tree.error"));
@@ -110,18 +113,25 @@ public final class RecipeTreeSessions {
         boolean saved = false;
         if (!validSession(player, session)) {
             message = "stale";
-        } else if (!PatternRecipeRules.maySave(request.excluded(), session.excluded(), session.shown())) {
+        } else if (!PatternRecipeRules.maySave(request.excluded(), session.excluded(), session.shown())
+                || !PatternIngredientLocks.maySave(request.locks(), session.locks(), session.nodes())) {
             message = "invalid";
         } else {
             // Replace the stack; never mutate an AE2 key's shared component identity in place.
-            var updated = held.copy();
-            PatternRecipeRules.write(updated, request.excluded());
-            session.slot().set(updated);
-            session.slot().setChanged();
-            player.getInventory().setChanged();
-            player.containerMenu.broadcastChanges();
-            message = "saved";
-            saved = true;
+            try {
+                var updated = held.copy();
+                PatternRecipeRules.write(updated, request.excluded());
+                var physical = PatternIngredientLocks.physical(request.locks(), session.raw());
+                if (!PatternIngredientLocks.validRootCombination(session.raw(), physical, player.level())) throw new IllegalArgumentException("Invalid locked recipe");
+                PatternIngredientLocks.write(updated, physical);
+                if (PatternDetailsHelper.decodePattern(updated, player.level()) == null) throw new IllegalArgumentException("Invalid locked pattern");
+                session.slot().set(updated);
+                session.slot().setChanged();
+                player.getInventory().setChanged();
+                player.containerMenu.broadcastChanges();
+                message = "saved";
+                saved = true;
+            } catch (RuntimeException invalid) { message = "invalid"; }
         }
         PacketDistributor.sendToPlayer(player, new RecipeTreePackets.Result(session.id(), saved, message));
     }

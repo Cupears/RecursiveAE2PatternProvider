@@ -205,8 +205,12 @@ if (providers.gradleProperty('editorSmoke').isPresent()) {
     if (providers.gradleProperty('smokeCompatJar').isPresent()) {
         dependencies { runtimeOnly files(providers.gradleProperty('smokeCompatJar').get()) }
     }
+    if (providers.gradleProperty('smokeJeiJar').isPresent()) {
+        dependencies { runtimeOnly files(providers.gradleProperty('smokeJeiJar').get()) }
+    }
     neoForge.runs.client {
         systemProperty 'otter.editorSmoke', 'true'
+        systemProperty 'otter.smokeJei', providers.gradleProperty('smokeJeiJar').isPresent().toString()
         systemProperty 'otter.smoke.output', file('../../outputs/recipe-tree-smoke').absolutePath
     }
 }

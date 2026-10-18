@@ -20,6 +20,12 @@ import java.util.List;
 
 @JeiPlugin
 public class RecursivePatternJEIPlugin implements IModPlugin {
+    @Override public void onRuntimeAvailable(mezz.jei.api.runtime.IJeiRuntime runtime) {
+        com.lumengrid.recursiveae2patternprovider.client.RecipePreviewBridge.set(new JeiRecipePreviews(runtime));
+    }
+    @Override public void onRuntimeUnavailable() {
+        com.lumengrid.recursiveae2patternprovider.client.RecipePreviewBridge.set(null);
+    }
     public static final Identifier UID = Identifier.fromNamespaceAndPath(
             RecursiveAE2PatternProvider.MODID, "recursive_pattern_recipes");
 

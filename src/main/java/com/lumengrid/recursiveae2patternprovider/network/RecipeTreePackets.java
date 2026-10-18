@@ -35,6 +35,22 @@ public final class RecipeTreePackets {
             buf.writeUtf(id, PatternRecipeRules.MAX_ID_LENGTH);
         }
     }
+    private static Map<String, String> readLocks(RegistryFriendlyByteBuf buf) {
+        int count = bounded(buf.readVarInt(), PatternIngredientLocks.MAX_LOCKS); var result = new TreeMap<String, String>();
+        for (int i = 0; i < count; i++) {
+            String key = buf.readUtf(PatternIngredientLocks.MAX_SCOPE), item = buf.readUtf(PatternRecipeRules.MAX_ID_LENGTH);
+            if (!PatternIngredientLocks.validScope(key) || !PatternRecipeRules.valid(item) || result.put(key, item) != null)
+                throw new IllegalArgumentException("Invalid ingredient locks");
+        }
+        return Map.copyOf(result);
+    }
+    private static void writeLocks(RegistryFriendlyByteBuf buf, Map<String, String> locks) {
+        buf.writeVarInt(bounded(locks.size(), PatternIngredientLocks.MAX_LOCKS));
+        for (var e : new TreeMap<>(locks).entrySet()) {
+            if (!PatternIngredientLocks.validScope(e.getKey()) || !PatternRecipeRules.valid(e.getValue())) throw new IllegalArgumentException("Invalid ingredient locks");
+            buf.writeUtf(e.getKey(), PatternIngredientLocks.MAX_SCOPE); buf.writeUtf(e.getValue(), PatternRecipeRules.MAX_ID_LENGTH);
+        }
+    }
     public record Defaults(int containerId, Set<String> excluded) implements CustomPacketPayload {
         public static final Type<Defaults> TYPE = RecipeTreePackets.type("recipe_defaults");
         public static final StreamCodec<RegistryFriendlyByteBuf, Defaults> CODEC = new StreamCodec<>() {
@@ -62,7 +78,8 @@ public final class RecipeTreePackets {
             ctx.enqueueWork(() -> { if (ctx.player() instanceof ServerPlayer player) RecipeTreeSessions.open(player, packet.containerId()); });
         }
     }
-    public record Open(UUID session, RecipeTree tree, Set<String> excluded) implements CustomPacketPayload {
+    public record Open(UUID session, RecipeTree tree, Set<String> excluded, Map<String, String> locks) implements CustomPacketPayload {
+        public Open(UUID session, RecipeTree tree, Set<String> excluded) { this(session, tree, excluded, Map.of()); }
         public static final Type<Open> TYPE = RecipeTreePackets.type("recipe_tree_open");
         public static final StreamCodec<RegistryFriendlyByteBuf, Open> CODEC = new StreamCodec<>() {
             public Open decode(RegistryFriendlyByteBuf buf) {
@@ -84,7 +101,7 @@ public final class RecipeTreePackets {
                     if (recipe) for (int j = 0; j < 9; j++) grid.add(ItemStack.OPTIONAL_STREAM_CODEC.decode(buf));
                     nodes.add(new RecipeTree.Node(parent, recipe, item, recipeId, grid, note, choice));
                 }
-                return new Open(id, new RecipeTree(List.copyOf(nodes), truncated), readIds(buf));
+                return new Open(id, new RecipeTree(List.copyOf(nodes), truncated), readIds(buf), readLocks(buf));
             }
             public void encode(RegistryFriendlyByteBuf buf, Open packet) {
                 buf.writeUUID(packet.session());
@@ -100,7 +117,7 @@ public final class RecipeTreePackets {
                         for (var stack : node.grid()) ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, stack);
                     }
                 }
-                writeIds(buf, packet.excluded());
+                writeIds(buf, packet.excluded()); writeLocks(buf, packet.locks());
             }
         };
         public Type<? extends CustomPacketPayload> type() { return TYPE; }
@@ -164,12 +181,13 @@ public final class RecipeTreePackets {
             ctx.enqueueWork(() -> com.lumengrid.recursiveae2patternprovider.client.RecipeTreeScreen.branch(packet));
         }
     }
-    public record Save(UUID session, boolean apply, Set<String> excluded) implements CustomPacketPayload {
+    public record Save(UUID session, boolean apply, Set<String> excluded, Map<String, String> locks) implements CustomPacketPayload {
+        public Save(UUID session, boolean apply, Set<String> excluded) { this(session, apply, excluded, Map.of()); }
         public static final Type<Save> TYPE = RecipeTreePackets.type("recipe_tree_save");
         public static final StreamCodec<RegistryFriendlyByteBuf, Save> CODEC = new StreamCodec<>() {
-            public Save decode(RegistryFriendlyByteBuf buf) { return new Save(buf.readUUID(), buf.readBoolean(), readIds(buf)); }
+            public Save decode(RegistryFriendlyByteBuf buf) { return new Save(buf.readUUID(), buf.readBoolean(), readIds(buf), readLocks(buf)); }
             public void encode(RegistryFriendlyByteBuf buf, Save packet) {
-                buf.writeUUID(packet.session()); buf.writeBoolean(packet.apply()); writeIds(buf, packet.excluded());
+                buf.writeUUID(packet.session()); buf.writeBoolean(packet.apply()); writeIds(buf, packet.excluded()); writeLocks(buf, packet.locks());
             }
         };
         public Type<? extends CustomPacketPayload> type() { return TYPE; }
