@@ -33,6 +33,24 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(EphemeralTestServerProvider.class)
 class AvailableRecipePlanningTest {
     @Test
+    void storedVariantCanCraftAuxiliaryConversionIngredients(MinecraftServer server) throws Exception {
+        var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.YELLOW_STAINED_GLASS), 8),
+                new GenericStack(AEItemKey.of(Items.REDSTONE_TORCH), 1)), Items.GLASS, 8);
+        StoredConversionInputs.register(recover, List.of(AEItemKey.of(Items.YELLOW_STAINED_GLASS)));
+        var invert = processing(List.of(new GenericStack(AEItemKey.of(Items.GLASS), 8),
+                new GenericStack(AEItemKey.of(Items.REDSTONE_TORCH), 1)), Items.YELLOW_STAINED_GLASS, 8);
+        var torch = processing(List.of(new GenericStack(AEItemKey.of(Items.REDSTONE), 1),
+                new GenericStack(AEItemKey.of(Items.STICK), 1)), Items.REDSTONE_TORCH, 1);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.GLASS), 8)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, recover, invert, torch),
+                Map.of(Items.YELLOW_STAINED_GLASS, 8L, Items.REDSTONE, 1L, Items.STICK, 1L), Items.CLOCK, 1);
+        assertFalse(plan.simulation());
+        assertEquals(1L, plan.patternTimes().get(recover));
+        assertEquals(1L, plan.patternTimes().get(torch));
+        assertFalse(plan.patternTimes().containsKey(invert));
+    }
+
+    @Test
     void copperRecoveryDoesNotPackAndWaxFreshIngots(MinecraftServer server) throws Exception {
         var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.WAXED_COPPER_BLOCK), 1)), Items.COPPER_INGOT, 9);
         StoredConversionInputs.register(recover);

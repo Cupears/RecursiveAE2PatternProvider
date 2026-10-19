@@ -14,20 +14,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(value = CraftingTreeNode.class, remap = false)
 public abstract class StoredConversionInputMixin {
     @Shadow @Final private CraftingTreeProcess parent;
+    @Shadow @Final private AEKey what;
     @Shadow private ArrayList<CraftingTreeProcess> nodes;
 
-    @Unique private boolean recursiveAE2$storedOnly() {
-        return parent != null && StoredConversionInputs.contains(((CraftingTreeProcessAccessor) parent).recursiveAE2$details());
+    @Unique private boolean recursiveAE2$storedOnly(AEKey key) {
+        return parent != null && StoredConversionInputs.contains(((CraftingTreeProcessAccessor) parent).recursiveAE2$details(), key);
     }
 
     @Inject(method = "findCraftedStack", at = @At("HEAD"), cancellable = true)
     private void recursiveAE2$keepStoredIdentity(ICraftingService service, AEKey key, CallbackInfoReturnable<AEKey> cir) {
-        if (recursiveAE2$storedOnly()) cir.setReturnValue(key);
+        if (recursiveAE2$storedOnly(key)) cir.setReturnValue(key);
     }
 
     @Inject(method = "buildChildPatterns", at = @At("HEAD"), cancellable = true)
     private void recursiveAE2$avoidReverseDetour(CallbackInfo ci) {
-        if (recursiveAE2$storedOnly()) {
+        if (recursiveAE2$storedOnly(what)) {
             if (nodes == null) nodes = new ArrayList<>();
             ci.cancel();
         }

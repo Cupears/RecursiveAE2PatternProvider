@@ -19,6 +19,47 @@ class RecipeSelectionTest {
     private final Map<Item, List<RecipeHolder<CraftingRecipe>>> index = new HashMap<>();
 
     @Test
+    void recoveryWithExtraIngredientsRestrictsOnlyTheReturningVariant(MinecraftServer server) {
+        CraftingRecipe recovery = new ShapedRecipe(null, null, ShapedRecipePattern.of(
+                Map.of('B', Ingredient.of(Items.BLUE_STAINED_GLASS), 'T', Ingredient.of(Items.REDSTONE_TORCH)), "BBB", "BTB", "BBB"),
+                new ItemStackTemplate(Items.GLASS, 8));
+        CraftingRecipe invert = new ShapedRecipe(null, null, ShapedRecipePattern.of(
+                Map.of('G', Ingredient.of(Items.GLASS), 'T', Ingredient.of(Items.REDSTONE_TORCH)), "GGG", "GTG", "GGG"),
+                new ItemStackTemplate(Items.BLUE_STAINED_GLASS, 8));
+        var holder = new RecipeHolder<CraftingRecipe>(ResourceKey.create(Registries.RECIPE, Identifier.parse("test:recover_with_torch")), recovery);
+        index.put(Items.GLASS, List.of(holder));
+        index.put(Items.BLUE_STAINED_GLASS, List.of(new RecipeHolder<>(
+                ResourceKey.create(Registries.RECIPE, Identifier.parse("test:invert_with_torch")), invert)));
+        var selection = selector(Set.of(Items.GLASS));
+        assertEquals(Set.of(Items.BLUE_STAINED_GLASS), selection.storedInputs(grid(recovery), Items.GLASS, 8));
+        assertTrue(selection.storedInputs(grid(invert), Items.BLUE_STAINED_GLASS, 8).isEmpty());
+        assertTrue(selection.alternatives(Items.GLASS, Set.of()).stream().anyMatch(choice -> choice.recipe().equals(holder)));
+    }
+
+    @Test
+    void slabCraftingUsesFreshBlocksButRecoveryDoesNotCraftSlabs(MinecraftServer server) {
+        add("test:stone_from_resource", Items.STONE, 1, Items.COBBLESTONE, 1);
+        add("test:slabs", Items.STONE_SLAB, 6, Items.STONE, 3);
+        add("test:recover_stone", Items.STONE, 1, Items.STONE_SLAB, 2);
+        var selection = selector(Set.of(Items.STONE));
+        assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.STONE, 3)}, Items.STONE_SLAB, 6));
+        assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.STONE_SLAB, 2)}, Items.STONE, 1));
+    }
+
+    @Test
+    void tagAlternativeCanEstablishReturnConversion(MinecraftServer server) {
+        CraftingRecipe variant = new ShapedRecipe(null, null, ShapedRecipePattern.of(
+                Map.of('G', Ingredient.of(Items.WHITE_STAINED_GLASS, Items.GLASS)), "G"),
+                new ItemStackTemplate(Items.BLUE_STAINED_GLASS));
+        index.put(Items.BLUE_STAINED_GLASS, List.of(new RecipeHolder<>(
+                ResourceKey.create(Registries.RECIPE, Identifier.parse("test:glass_variants")), variant)));
+        var selection = selector(Set.of(Items.GLASS));
+        assertTrue(grid(variant)[0].is(Items.WHITE_STAINED_GLASS));
+        assertTrue(selection.isConversion(new ItemStack[]{new ItemStack(Items.BLUE_STAINED_GLASS)}, Items.GLASS));
+        assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.BLUE_STAINED_GLASS)}, Items.GLASS, 1));
+    }
+
+    @Test
     void waxedCopperRecoveryDetectsTwoStepReturnPath(MinecraftServer server) {
         add("test:copper_block", Items.COPPER_BLOCK, 1, Items.COPPER_INGOT, 9);
         CraftingRecipe wax = new ShapedRecipe(null, null, ShapedRecipePattern.of(
@@ -48,6 +89,8 @@ class RecipeSelectionTest {
         var selection = selector(Set.of(Items.IRON_INGOT));
         assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.IRON_BLOCK)}, Items.IRON_INGOT, 9));
         assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.IRON_INGOT, 9)}, Items.IRON_BLOCK, 1));
+        assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.IRON_INGOT)}, Items.IRON_NUGGET, 9));
+        assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.IRON_NUGGET, 9)}, Items.IRON_INGOT, 1));
     }
 
     @Test

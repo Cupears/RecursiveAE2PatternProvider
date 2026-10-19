@@ -20,6 +20,7 @@ final class RecipeSelection {
     private record Conversion(Item source, Item target) {}
     private final Map<Conversion, Boolean> conversionPaths = new HashMap<>();
     private final Map<Item, Set<Item>> conversionInputs = new HashMap<>();
+    private final Map<Conversion, Boolean> independentRoutes = new HashMap<>();
 
     RecipeSelection(Map<Item, List<RecipeHolder<CraftingRecipe>>> index, Set<Item> furnaceOutputs,
                     Predicate<RecipeHolder<CraftingRecipe>> allowed,
@@ -40,9 +41,11 @@ final class RecipeSelection {
         for (var choice : rank(target, Set.of())) choices.put(choice.recipe(), choice);
         for (var recipe : index.getOrDefault(target, List.of())) {
             try {
-                if (!allowed.test(recipe) || !isConversion(recipe.value(), target)) continue;
+                if (!allowed.test(recipe)) continue;
                 var output = recipe.value().assemble(net.minecraft.world.item.crafting.CraftingInput.EMPTY);
                 if (output.isEmpty() || !output.is(target)) continue;
+                if (!isConversion(recipe.value(), target)
+                        && !requiresStoredInput(grid.apply(recipe.value()), target, output.getCount())) continue;
                 double inputs = 1;
                 boolean cyclic = false;
                 for (var input : grid.apply(recipe.value())) {
@@ -79,15 +82,57 @@ final class RecipeSelection {
     }
 
     boolean requiresStoredInput(ItemStack[] inputs, Item target, int outputCount) {
-        int consumed = Arrays.stream(inputs).filter(input -> !input.isEmpty()).mapToInt(ItemStack::getCount).sum();
-        // Packing ingots into blocks is a normal dependency, not a stock-only
-        // fallback. Unpacking and equal-count cosmetic conversions are fallbacks.
-        if (outputCount < consumed || !isConversion(inputs, target)) return false;
-        if (outputCount > consumed) return true;
-        Item source = Arrays.stream(inputs).filter(input -> !input.isEmpty()).findFirst().orElseThrow().getItem();
-        // Orient equal-count cosmetic cycles consistently. Normal -> decorative
-        // variants must remain craftable; only the return direction uses stock.
+        return !storedInputs(inputs, target, outputCount).isEmpty();
+    }
+
+    Set<Item> storedInputs(ItemStack[] inputs, Item target, int outputCount) {
+        if (outputCount <= 0) return Set.of();
+        Set<Item> result = new HashSet<>();
+        for (Item source : Arrays.stream(inputs).filter(input -> !input.isEmpty()).map(ItemStack::getItem).distinct().toList()) {
+            if (source != target && reverses(source, target) && recoveryDirection(target, source)) result.add(source);
+        }
+        return result;
+    }
+
+    private boolean recoveryDirection(Item target, Item source) {
+        // Counts alone confuse forward slab/plank crafting with recovery. Prefer
+        // the side that can be made without spending the other side of the loop.
+        boolean targetIndependent = independentOf(target, source);
+        boolean sourceIndependent = independentOf(source, target);
+        if (targetIndependent != sourceIndependent) return targetIndependent;
         return canonicalOrder(target, source) < 0;
+    }
+
+    private boolean independentOf(Item item, Item excluded) {
+        return independentRoutes.computeIfAbsent(new Conversion(item, excluded), ignored ->
+                independentOf(item, excluded, new HashSet<>(), new int[]{MAX_VISITS}, new HashSet<>()));
+    }
+
+    private boolean independentOf(Item item, Item excluded, Set<Item> path, int[] budget, Set<Item> proven) {
+        if (item == excluded) return false;
+        if (furnaceOutputs.contains(item) || proven.contains(item)) return true;
+        if (path.size() >= MAX_DEPTH || --budget[0] < 0 || !path.add(item)) return false;
+        boolean hasRecipe = false;
+        try {
+            for (var recipe : index.getOrDefault(item, List.of())) {
+                if (!allowed.test(recipe)) continue;
+                hasRecipe = true;
+                boolean possible = true;
+                for (var ingredient : recipe.value().placementInfo().ingredients()) {
+                    boolean accepted = false;
+                    for (var option : IngredientChoices.items(ingredient)) {
+                        if (independentOf(option, excluded, path, budget, proven)) { accepted = true; break; }
+                    }
+                    if (!accepted) { possible = false; break; }
+                }
+                if (possible) { proven.add(item); return true; }
+            }
+            return !hasRecipe; // Raw resources and machine-only outputs may be supplied externally.
+        } catch (RuntimeException ignored) {
+            return false;
+        } finally {
+            path.remove(item);
+        }
     }
 
     private int canonicalOrder(Item left, Item right) {
@@ -189,13 +234,16 @@ final class RecipeSelection {
                     for (var recipe : index.getOrDefault(item, List.of())) {
                         try {
                             if (!allowed.test(recipe)) continue;
-                            for (var stack : grid.apply(recipe.value())) if (!stack.isEmpty()) sources.add(stack.getItem());
+                            for (var ingredient : recipe.value().placementInfo().ingredients()) sources.addAll(IngredientChoices.items(ingredient));
                         } catch (RuntimeException ignored) {
                             // An unreadable route cannot prove a return conversion.
                         }
                     }
                     return sources;
-                })) pending.addLast(new Step(dependency, step.depth() + 1));
+                })) {
+                    if (dependency == output) return true;
+                    pending.addLast(new Step(dependency, step.depth() + 1));
+                }
             }
             return false;
         });

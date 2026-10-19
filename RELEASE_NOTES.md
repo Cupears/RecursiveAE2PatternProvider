@@ -1,3 +1,3 @@
-- Extend conversion-loop protection to waxed copper and longer recovery chains.
-- Preserve forward crafting of decorative variants while restricting return conversions.
-- Cache bounded conversion checks to avoid repeated recipe graph searches.
+- Detect return loops hidden in ingredient tags and recipes with extra tool or material inputs.
+- Restrict only the returning variant, allowing other conversion ingredients to be crafted.
+- Preserve forward slab, plank, and block crafting by checking independent material sources.

@@ -282,6 +282,7 @@ public final class RecursivePatternGenerator {
             for (var inputCandidate : candidates) {
                 try {
                     var key = inputCandidate.what();
+                    if (StoredConversionInputs.contains(pattern, key)) continue;
                     if (!(key instanceof AEItemKey itemKey)) {
                         continue;
                     }
@@ -347,12 +348,15 @@ public final class RecursivePatternGenerator {
                         if (aePattern == null || aePattern.getOutputs() == null || aePattern.getOutputs().isEmpty()) continue;
                         ctx.generated.add(aePattern);
                         PlanExplanation.registerGenerated(aePattern, ctx.rootOutputs);
-                        boolean storedConversion = ctx.selection.requiresStoredInput(inputs, targetType, recipeOutput.getCount());
-                        if (storedConversion) StoredConversionInputs.register(aePattern);
+                        var storedInputs = ctx.selection.storedInputs(inputs, targetType, recipeOutput.getCount());
+                        if (!storedInputs.isEmpty()) {
+                            var storedKeys = Arrays.stream(aePattern.getInputs()).flatMap(input -> Arrays.stream(input.getPossibleInputs()))
+                                    .map(stack -> stack.what()).filter(key -> key instanceof AEItemKey itemKey && storedInputs.contains(itemKey.getItem())).toList();
+                            StoredConversionInputs.register(aePattern, storedKeys);
+                        }
                         created++;
                         ctx.processedRecipes.add(recipe.id().toString());
 
-                        if (ctx.settings.retainAlternatives() && storedConversion) continue;
                         boolean added = ctx.ancestors.add(targetType);
                         try {
                             generateDependencyPatterns(aePattern, currentDepth + 1, ctx);

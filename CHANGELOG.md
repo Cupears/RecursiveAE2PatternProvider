@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0-beta.18
+
+- Detect return loops hidden in ingredient tags and recipes with extra tool or material inputs.
+- Restrict only the returning variant, allowing other conversion ingredients to be crafted.
+- Preserve forward slab, plank, and block crafting by checking independent material sources.
+
 ## 1.2.0-beta.17
 
 - Extend conversion-loop protection to waxed copper and longer recovery chains.
