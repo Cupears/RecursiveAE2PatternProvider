@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0-beta.17
+
+- Extend conversion-loop protection to waxed copper and longer recovery chains.
+- Preserve forward crafting of decorative variants while restricting return conversions.
+- Cache bounded conversion checks to avoid repeated recipe graph searches.
+
 ## 1.2.0-beta.16
 
 - Prevent generated recovery recipes from crafting their own conversion inputs, avoiding dye-and-recover glass detours.

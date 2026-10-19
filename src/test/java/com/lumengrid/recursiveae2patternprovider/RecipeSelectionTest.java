@@ -19,6 +19,30 @@ class RecipeSelectionTest {
     private final Map<Item, List<RecipeHolder<CraftingRecipe>>> index = new HashMap<>();
 
     @Test
+    void waxedCopperRecoveryDetectsTwoStepReturnPath(MinecraftServer server) {
+        add("test:copper_block", Items.COPPER_BLOCK, 1, Items.COPPER_INGOT, 9);
+        CraftingRecipe wax = new ShapedRecipe(null, null, ShapedRecipePattern.of(
+                Map.of('C', Ingredient.of(Items.COPPER_BLOCK), 'H', Ingredient.of(Items.HONEYCOMB)), "CH"),
+                new ItemStackTemplate(Items.WAXED_COPPER_BLOCK));
+        index.put(Items.WAXED_COPPER_BLOCK, List.of(new RecipeHolder<>(
+                ResourceKey.create(Registries.RECIPE, Identifier.parse("test:wax")), wax)));
+        var selection = selector(Set.of(Items.COPPER_INGOT));
+        assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.WAXED_COPPER_BLOCK)}, Items.COPPER_INGOT, 9));
+        assertFalse(selection.requiresStoredInput(grid(wax), Items.WAXED_COPPER_BLOCK, 1));
+        assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.COPPER_INGOT, 9)}, Items.COPPER_BLOCK, 1));
+    }
+
+    @Test
+    void longerCosmeticCycleProtectsRecoveryWithoutBlockingForwardDecoration(MinecraftServer server) {
+        add("test:glass_to_green", Items.GREEN_STAINED_GLASS, 1, Items.GLASS, 1);
+        add("test:green_to_blue", Items.BLUE_STAINED_GLASS, 1, Items.GREEN_STAINED_GLASS, 1);
+        add("test:blue_to_glass", Items.GLASS, 1, Items.BLUE_STAINED_GLASS, 1);
+        var selection = selector(Set.of(Items.GLASS));
+        assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.BLUE_STAINED_GLASS)}, Items.GLASS, 1));
+        assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.GLASS)}, Items.GREEN_STAINED_GLASS, 1));
+    }
+
+    @Test
     void unpackingUsesStockButPackingCanCraftItsInputs(MinecraftServer server) {
         conversions(Items.IRON_INGOT, Items.IRON_BLOCK, Items.IRON_NUGGET);
         var selection = selector(Set.of(Items.IRON_INGOT));
@@ -83,6 +107,7 @@ class RecipeSelectionTest {
         var bases = (Set<Item>) basesMethod.invoke(null, server.getRecipeManager());
         assertTrue(bases.containsAll(Set.of(Items.IRON_INGOT, Items.COPPER_INGOT, Items.GOLD_INGOT)));
         var selection = new RecipeSelection(recipes, bases, r -> true, this::grid);
+        assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.WAXED_COPPER_BLOCK)}, Items.COPPER_INGOT, 9));
         assertTrue(selection.rank(Items.IRON_INGOT, Set.of()).isEmpty());
         assertTrue(selection.rank(Items.COPPER_INGOT, Set.of()).isEmpty());
         assertFalse(selection.rank(Items.IRON_BLOCK, Set.of()).isEmpty());

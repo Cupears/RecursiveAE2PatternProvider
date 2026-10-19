@@ -17,6 +17,9 @@ final class RecipeSelection {
     private final Set<Item> furnaceOutputs;
     private final Predicate<RecipeHolder<CraftingRecipe>> allowed;
     private final Function<CraftingRecipe, ItemStack[]> grid;
+    private record Conversion(Item source, Item target) {}
+    private final Map<Conversion, Boolean> conversionPaths = new HashMap<>();
+    private final Map<Item, Set<Item>> conversionInputs = new HashMap<>();
 
     RecipeSelection(Map<Item, List<RecipeHolder<CraftingRecipe>>> index, Set<Item> furnaceOutputs,
                     Predicate<RecipeHolder<CraftingRecipe>> allowed,
@@ -79,7 +82,20 @@ final class RecipeSelection {
         int consumed = Arrays.stream(inputs).filter(input -> !input.isEmpty()).mapToInt(ItemStack::getCount).sum();
         // Packing ingots into blocks is a normal dependency, not a stock-only
         // fallback. Unpacking and equal-count cosmetic conversions are fallbacks.
-        return outputCount >= consumed && isConversion(inputs, target);
+        if (outputCount < consumed || !isConversion(inputs, target)) return false;
+        if (outputCount > consumed) return true;
+        Item source = Arrays.stream(inputs).filter(input -> !input.isEmpty()).findFirst().orElseThrow().getItem();
+        // Orient equal-count cosmetic cycles consistently. Normal -> decorative
+        // variants must remain craftable; only the return direction uses stock.
+        return canonicalOrder(target, source) < 0;
+    }
+
+    private int canonicalOrder(Item left, Item right) {
+        var registry = net.minecraft.core.registries.BuiltInRegistries.ITEM;
+        return Comparator.comparingInt((Item item) -> furnaceOutputs.contains(item) ? 0 : 1)
+                .thenComparingInt(item -> registry.getKey(item).getNamespace().equals("minecraft") ? 0 : 1)
+                .thenComparingInt(item -> registry.getKey(item).getPath().length())
+                .thenComparing(item -> registry.getKey(item).toString()).compare(left, right);
     }
 
     List<Choice> rank(Item target, Set<Item> ancestors) {
@@ -114,9 +130,8 @@ final class RecipeSelection {
                     total += inputCosts.get(item) * input.getCount();
                     continue;
                 }
-                boolean reversible = reverses(item, target);
                 // An ingot's block/nugget conversions aren't a source of new metal.
-                if (furnaceOutputs.contains(target) && reversible) return Double.POSITIVE_INFINITY;
+                if (furnaceOutputs.contains(target) && reverses(item, target)) return Double.POSITIVE_INFINITY;
                 double child = 1;
                 if (!furnaceOutputs.contains(item) && index.containsKey(item)) {
                     path.add(item);
@@ -160,22 +175,29 @@ final class RecipeSelection {
     }
 
     private boolean reverses(Item input, Item output) {
-        for (var recipe : index.getOrDefault(input, List.of())) {
-            try {
-                if (!allowed.test(recipe)) continue;
-                boolean found = false;
-                for (var stack : grid.apply(recipe.value())) {
-                    if (stack.isEmpty()) continue;
-                    // Recolouring may consume dye as well as the original glass.
-                    // It still establishes that crafting this input can spend the
-                    // very output we are trying to obtain through the reverse route.
-                    if (stack.is(output)) found = true;
-                }
-                if (found) return true;
-            } catch (RuntimeException ignored) {
-                // Unreadable recipes are not evidence of a reversible conversion.
+        return conversionPaths.computeIfAbsent(new Conversion(input, output), pair -> {
+            record Step(Item item, int depth) {}
+            var pending = new ArrayDeque<Step>();
+            var visited = new HashSet<Item>();
+            pending.add(new Step(input, 0));
+            while (!pending.isEmpty() && visited.size() < 256) {
+                var step = pending.removeFirst();
+                if (step.item() == output) return true;
+                if (step.depth() >= 8 || !visited.add(step.item())) continue;
+                for (var dependency : conversionInputs.computeIfAbsent(step.item(), item -> {
+                    Set<Item> sources = new LinkedHashSet<>();
+                    for (var recipe : index.getOrDefault(item, List.of())) {
+                        try {
+                            if (!allowed.test(recipe)) continue;
+                            for (var stack : grid.apply(recipe.value())) if (!stack.isEmpty()) sources.add(stack.getItem());
+                        } catch (RuntimeException ignored) {
+                            // An unreadable route cannot prove a return conversion.
+                        }
+                    }
+                    return sources;
+                })) pending.addLast(new Step(dependency, step.depth() + 1));
             }
-        }
-        return false;
+            return false;
+        });
     }
 }

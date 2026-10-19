@@ -1,2 +1,3 @@
-- Prevent generated recovery recipes from crafting their own conversion inputs, avoiding dye-and-recover glass detours.
-- Keep recovery from stored variants and normal ingot-to-block crafting available.
+- Extend conversion-loop protection to waxed copper and longer recovery chains.
+- Preserve forward crafting of decorative variants while restricting return conversions.
+- Cache bounded conversion checks to avoid repeated recipe graph searches.

@@ -33,6 +33,30 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(EphemeralTestServerProvider.class)
 class AvailableRecipePlanningTest {
     @Test
+    void copperRecoveryDoesNotPackAndWaxFreshIngots(MinecraftServer server) throws Exception {
+        var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.WAXED_COPPER_BLOCK), 1)), Items.COPPER_INGOT, 9);
+        StoredConversionInputs.register(recover);
+        var block = processing(List.of(new GenericStack(AEItemKey.of(Items.COPPER_INGOT), 9)), Items.COPPER_BLOCK, 1);
+        var wax = processing(List.of(new GenericStack(AEItemKey.of(Items.COPPER_BLOCK), 1),
+                new GenericStack(AEItemKey.of(Items.HONEYCOMB), 1)), Items.WAXED_COPPER_BLOCK, 1);
+        var fresh = processing(List.of(new GenericStack(AEItemKey.of(Items.RAW_COPPER), 1)), Items.COPPER_INGOT, 1);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.COPPER_INGOT), 9)), Items.CLOCK, 1);
+        var patterns = List.of(root, recover, wax, block, fresh);
+        var plan = calculate(patterns, Map.of(Items.COPPER_INGOT, 8L, Items.RAW_COPPER, 1L, Items.HONEYCOMB, 1L), Items.CLOCK, 1);
+        assertFalse(plan.simulation());
+        assertEquals(1L, plan.patternTimes().get(fresh));
+        assertFalse(plan.patternTimes().containsKey(wax));
+        assertFalse(plan.patternTimes().containsKey(recover));
+        var stored = calculate(patterns, Map.of(Items.WAXED_COPPER_BLOCK, 1L), Items.CLOCK, 1);
+        assertFalse(stored.simulation());
+        assertEquals(1L, stored.patternTimes().get(recover));
+        var packed = calculate(List.of(block, recover, fresh), Map.of(Items.RAW_COPPER, 9L), Items.COPPER_BLOCK, 1);
+        assertFalse(packed.simulation());
+        assertEquals(1L, packed.patternTimes().get(block));
+        assertEquals(9L, packed.patternTimes().get(fresh));
+    }
+
+    @Test
     void conversionRestrictionDoesNotLeakToEqualManualPattern(MinecraftServer server) {
         var inputs = List.of(new GenericStack(AEItemKey.of(Items.RED_STAINED_GLASS), 8));
         var generated = processing(inputs, Items.GLASS, 8);
