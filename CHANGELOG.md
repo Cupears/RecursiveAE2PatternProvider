@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0-beta.16
+
+- Prevent generated recovery recipes from crafting their own conversion inputs, avoiding dye-and-recover glass detours.
+- Keep recovery from stored variants and normal ingot-to-block crafting available.
+
 ## 1.2.0-beta.15
 
 - Added an orange From pattern line identifying the stored recursive pattern behind a crafting-plan ingredient.

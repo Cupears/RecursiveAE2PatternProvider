@@ -19,6 +19,28 @@ class RecipeSelectionTest {
     private final Map<Item, List<RecipeHolder<CraftingRecipe>>> index = new HashMap<>();
 
     @Test
+    void unpackingUsesStockButPackingCanCraftItsInputs(MinecraftServer server) {
+        conversions(Items.IRON_INGOT, Items.IRON_BLOCK, Items.IRON_NUGGET);
+        var selection = selector(Set.of(Items.IRON_INGOT));
+        assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.IRON_BLOCK)}, Items.IRON_INGOT, 9));
+        assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.IRON_INGOT, 9)}, Items.IRON_BLOCK, 1));
+    }
+
+    @Test
+    void glassRecoveryRecognizesReverseRecipeWithAddedDye(MinecraftServer server) {
+        var colour = new ShapedRecipe(null, null, ShapedRecipePattern.of(
+                Map.of('G', Ingredient.of(Items.GLASS), 'D', Ingredient.of(Items.BROWN_DYE)), "GGG", "GDG", "GGG"),
+                new ItemStackTemplate(Items.BROWN_STAINED_GLASS, 8));
+        index.put(Items.BROWN_STAINED_GLASS, List.of(new RecipeHolder<>(
+                ResourceKey.create(Registries.RECIPE, Identifier.parse("test:brown_glass")), colour)));
+        var selection = selector(Set.of());
+        assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.BROWN_STAINED_GLASS, 8)}, Items.GLASS, 8));
+        assertFalse(selection.requiresStoredInput(grid(colour), Items.BROWN_STAINED_GLASS, 8));
+        var blocked = new RecipeSelection(index, Set.of(), r -> false, this::grid);
+        assertFalse(blocked.requiresStoredInput(new ItemStack[]{new ItemStack(Items.BROWN_STAINED_GLASS, 8)}, Items.GLASS, 8));
+    }
+
+    @Test
     void redstoneBlocksAndHatRecipeAreBothPublished(MinecraftServer server) {
         add("minecraft:redstone_from_block", Items.REDSTONE, 9, Items.REDSTONE_BLOCK, 1);
         add("minecraft:redstone_block", Items.REDSTONE_BLOCK, 1, Items.REDSTONE, 9);

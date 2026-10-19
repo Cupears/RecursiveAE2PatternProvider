@@ -5,6 +5,8 @@
   "plugin": "com.lumengrid.recursiveae2patternprovider.mixin.RecursiveAE2MixinPlugin",
   "mixins": [
     "CraftingServiceMixin",
+    "CraftingTreeProcessAccessor",
+    "StoredConversionInputMixin",
     "ShapelessPatternIngredientsMixin",
     "LockedCraftingPatternMixin",
     "LockedCraftingInputMixin",

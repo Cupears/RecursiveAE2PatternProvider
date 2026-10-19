@@ -33,6 +33,45 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(EphemeralTestServerProvider.class)
 class AvailableRecipePlanningTest {
     @Test
+    void conversionRestrictionDoesNotLeakToEqualManualPattern(MinecraftServer server) {
+        var inputs = List.of(new GenericStack(AEItemKey.of(Items.RED_STAINED_GLASS), 8));
+        var generated = processing(inputs, Items.GLASS, 8);
+        var manual = processing(inputs, Items.GLASS, 8);
+        StoredConversionInputs.register(generated);
+        assertTrue(StoredConversionInputs.contains(generated));
+        assertFalse(StoredConversionInputs.contains(manual));
+    }
+
+    @Test
+    void glassRecoveryDoesNotCraftItsOwnColouredInput(MinecraftServer server) throws Exception {
+        var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.BROWN_STAINED_GLASS), 8)), Items.GLASS, 8);
+        StoredConversionInputs.register(recover);
+        var dye = processing(List.of(new GenericStack(AEItemKey.of(Items.GLASS), 8),
+                new GenericStack(AEItemKey.of(Items.BROWN_DYE), 1)), Items.BROWN_STAINED_GLASS, 8);
+        var fresh = processing(List.of(new GenericStack(AEItemKey.of(Items.SAND), 1)), Items.GLASS, 1);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.GLASS), 8)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, recover, dye, fresh), Map.of(Items.GLASS, 7L, Items.SAND, 1L, Items.BROWN_DYE, 1L), Items.CLOCK, 1);
+        assertFalse(plan.simulation());
+        assertFalse(plan.patternTimes().containsKey(dye));
+        assertFalse(plan.patternTimes().containsKey(recover));
+        assertEquals(1L, plan.patternTimes().get(fresh));
+        assertEquals(0L, plan.usedItems().get(AEItemKey.of(Items.BROWN_DYE)));
+    }
+
+    @Test
+    void glassRecoveryCanStillUseExistingColouredGlass(MinecraftServer server) throws Exception {
+        var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.BLUE_STAINED_GLASS), 8)), Items.GLASS, 8);
+        StoredConversionInputs.register(recover);
+        var dye = processing(List.of(new GenericStack(AEItemKey.of(Items.GLASS), 8),
+                new GenericStack(AEItemKey.of(Items.BLUE_DYE), 1)), Items.BLUE_STAINED_GLASS, 8);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.GLASS), 8)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, recover, dye), Map.of(Items.BLUE_STAINED_GLASS, 8L), Items.CLOCK, 1);
+        assertFalse(plan.simulation());
+        assertEquals(1L, plan.patternTimes().get(recover));
+        assertFalse(plan.patternTimes().containsKey(dye));
+    }
+
+    @Test
     void runtimeSubstitutionCanSpendLogsReservedForAnotherTask(MinecraftServer server) throws Exception {
         var wood = processing(List.of(new GenericStack(AEItemKey.of(Items.CHERRY_LOG), 4)), Items.CHERRY_WOOD, 3);
         var planks = flexibleCherryLogs(processing(List.of(new GenericStack(AEItemKey.of(Items.CHERRY_LOG), 1)), Items.CHERRY_PLANKS, 4));

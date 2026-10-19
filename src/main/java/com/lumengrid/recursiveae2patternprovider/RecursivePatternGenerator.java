@@ -347,10 +347,12 @@ public final class RecursivePatternGenerator {
                         if (aePattern == null || aePattern.getOutputs() == null || aePattern.getOutputs().isEmpty()) continue;
                         ctx.generated.add(aePattern);
                         PlanExplanation.registerGenerated(aePattern, ctx.rootOutputs);
+                        boolean storedConversion = ctx.selection.requiresStoredInput(inputs, targetType, recipeOutput.getCount());
+                        if (storedConversion) StoredConversionInputs.register(aePattern);
                         created++;
                         ctx.processedRecipes.add(recipe.id().toString());
 
-                        if (ctx.settings.retainAlternatives() && ctx.selection.isConversion(inputs, targetType)) continue;
+                        if (ctx.settings.retainAlternatives() && storedConversion) continue;
                         boolean added = ctx.ancestors.add(targetType);
                         try {
                             generateDependencyPatterns(aePattern, currentDepth + 1, ctx);

@@ -75,6 +75,13 @@ final class RecipeSelection {
         return source != null && source != target && reverses(source, target);
     }
 
+    boolean requiresStoredInput(ItemStack[] inputs, Item target, int outputCount) {
+        int consumed = Arrays.stream(inputs).filter(input -> !input.isEmpty()).mapToInt(ItemStack::getCount).sum();
+        // Packing ingots into blocks is a normal dependency, not a stock-only
+        // fallback. Unpacking and equal-count cosmetic conversions are fallbacks.
+        return outputCount >= consumed && isConversion(inputs, target);
+    }
+
     List<Choice> rank(Item target, Set<Item> ancestors) {
         List<Choice> choices = new ArrayList<>();
         // A fresh budget per candidate makes results independent of recipe enumeration order.
@@ -159,8 +166,10 @@ final class RecipeSelection {
                 boolean found = false;
                 for (var stack : grid.apply(recipe.value())) {
                     if (stack.isEmpty()) continue;
-                    if (!stack.is(output)) { found = false; break; }
-                    found = true;
+                    // Recolouring may consume dye as well as the original glass.
+                    // It still establishes that crafting this input can spend the
+                    // very output we are trying to obtain through the reverse route.
+                    if (stack.is(output)) found = true;
                 }
                 if (found) return true;
             } catch (RuntimeException ignored) {
