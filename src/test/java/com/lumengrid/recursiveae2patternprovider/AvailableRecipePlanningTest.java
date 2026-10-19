@@ -198,7 +198,7 @@ class AvailableRecipePlanningTest {
         // Supplying the intermediate directly removes the source shortage.
         var supplied = calculate(List.of(root, hats), Map.of(Items.REDSTONE, 48L), Items.CLOCK, 1);
         assertFalse(supplied.simulation());
-        assertTrue(PlanExplanation.analyze(supplied).isEmpty());
+        assertFalse(PlanExplanation.analyze(supplied).containsKey(AEItemKey.of(Items.LEATHER_HELMET)));
     }
 
     @Test
@@ -225,11 +225,25 @@ class AvailableRecipePlanningTest {
     }
 
     @Test
-    void doesNotAnnotateManuallyEncodedPatterns(MinecraftServer server) throws Exception {
+    void manuallyEncodedPatternExplainsItsSelectedMissingSource(MinecraftServer server) throws Exception {
         var manual = pattern(Items.DIRT, 1, 1);
         var plan = calculate(List.of(manual), Map.of(), 1);
         assertTrue(plan.simulation());
-        assertTrue(PlanExplanation.analyze(plan).isEmpty());
+        assertEquals(List.of(AEItemKey.of(Items.REDSTONE)), PlanExplanation.analyze(plan).get(AEItemKey.of(Items.DIRT)));
+    }
+
+    @Test
+    void manualWaterBucketDependencyExplainsSourceAndRequestedPattern(MinecraftServer server) throws Exception {
+        var fill = processing(List.of(new GenericStack(AEItemKey.of(Items.LEATHER_HELMET), 1),
+                new GenericStack(AEItemKey.of(Items.BUCKET), 1)), Items.WATER_BUCKET, 1);
+        var wash = processing(List.of(new GenericStack(AEItemKey.of(Items.MAGENTA_WOOL), 1),
+                new GenericStack(AEItemKey.of(Items.WATER_BUCKET), 1)), Items.STRING, 1);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.STRING), 1)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, wash, fill), Map.of(Items.BUCKET, 1L), Items.CLOCK, 1);
+        var explanation = PlanExplanation.analyze(plan);
+        assertTrue(plan.simulation());
+        assertEquals(List.of(AEItemKey.of(Items.WATER_BUCKET)), explanation.get(AEItemKey.of(Items.LEATHER_HELMET)));
+        assertEquals(List.of(AEItemKey.of(Items.CLOCK)), PlanExplanation.origins(plan, explanation).get(AEItemKey.of(Items.LEATHER_HELMET)));
     }
 
     @Test

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0-beta.19
+
+- Show missing-source and originating-pattern explanations for selected stored patterns as well as generated recipes.
+- Keep normal recursive manufacturing routes available when an existing pattern only provides recovery or washing.
+
 ## 1.2.0-beta.18
 
 - Detect return loops hidden in ingredient tags and recipes with extra tool or material inputs.

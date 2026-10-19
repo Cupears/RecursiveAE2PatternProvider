@@ -225,7 +225,7 @@ public final class RecursivePatternGenerator {
         for (var group : groups.entrySet()) {
             Context ctx = new Context(level, maxDepth, index, settings.withExclusions(group.getKey().excluded()));
             ctx.ingredientLocks = group.getKey().locks();
-            if (existingPatterns != null) for (var existing : existingPatterns) markOutputsProcessed(existing, ctx);
+            if (existingPatterns != null) for (var existing : existingPatterns) markOutputsProcessed(existing, ctx, true);
             for (var root : recursivePatterns) markOutputsProcessed(root, ctx);
             for (var root : group.getValue()) {
                 ctx.rootOutputs = root.getOutputs().stream().map(output -> output.what()).toList();
@@ -243,9 +243,21 @@ public final class RecursivePatternGenerator {
     }
 
     private static void markOutputsProcessed(IPatternDetails pattern, Context ctx) {
+        markOutputsProcessed(pattern, ctx, false);
+    }
+
+    private static void markOutputsProcessed(IPatternDetails pattern, Context ctx, boolean allowRecoveryFallback) {
         try {
             for (var output : pattern.getOutputs()) {
                 if (output.what() instanceof AEItemKey itemKey) {
+                    if (allowRecoveryFallback) {
+                        var inputs = Arrays.stream(pattern.getInputs()).flatMap(input -> Arrays.stream(input.getPossibleInputs()))
+                                .map(stack -> stack.what()).filter(key -> key instanceof AEItemKey)
+                                .map(key -> ((AEItemKey) key).toStack()).toArray(ItemStack[]::new);
+                        // A stored wash/unpack recipe is not proof that the base
+                        // item can be manufactured. Keep normal recursive routes.
+                        if (ctx.selection.requiresStoredInput(inputs, itemKey.getItem(), 1)) continue;
+                    }
                     ctx.processedItems.add(itemKey);
                 }
             }

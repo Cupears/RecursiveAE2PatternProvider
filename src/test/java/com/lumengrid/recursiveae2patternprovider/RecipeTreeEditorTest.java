@@ -484,6 +484,21 @@ class RecipeTreeEditorTest {
             assertTrue(PatternRecipeRules.read(other.getDefinition().toStack()).isEmpty());
         });
     }
+    @Test void storedRecoveryPatternDoesNotHideNormalManufacturingRoute(MinecraftServer server) throws Exception {
+        withRecipes(server, List.of(recipe("test:base_string", Items.DIRT, Items.STRING, 1),
+                recipe("test:colour_string", Items.STRING, Items.MAGENTA_WOOL, 1)), () -> {
+            var root = details(pattern(Items.STRING, Items.CLOCK, Set.of()));
+            var washStack = pattern(Items.MAGENTA_WOOL, Items.STRING, Set.of());
+            PatternUtil.setRecursive(washStack, false);
+            var wash = details(washStack);
+            var generated = RecursivePatternGenerator.generate(List.of(root), List.of(root, wash), recipeLevel(server), -1);
+            assertTrue(consumes(generated, Items.DIRT), "A known recovery recipe suppressed the base manufacturing route");
+            var manual = details(pattern(Items.WHEAT, Items.STRING, Set.of()));
+            var preserved = RecursivePatternGenerator.generate(List.of(root), List.of(root, manual), recipeLevel(server), -1);
+            assertFalse(consumes(preserved, Items.DIRT), "A normal manual manufacturing pattern should remain authoritative");
+        });
+    }
+
     private static RecipeTree expandedTree(IPatternDetails root, net.minecraft.world.level.Level level) {
         var initial = RecipeTree.build(root, level); var nodes = new ArrayList<>(initial.nodes());
         for (int id = 1; id < nodes.size(); id++) {

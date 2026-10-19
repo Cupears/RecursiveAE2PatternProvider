@@ -35,7 +35,8 @@ public final class PlanExplanation {
             if (use.getValue() <= 0) continue;
             var pattern = use.getKey();
             for (var output : pattern.getOutputs()) {
-                if (PatternUtil.isRecursive(pattern.getDefinition().toStack())) selectedRoots.add(output.what());
+                if (PatternUtil.isRecursive(pattern.getDefinition().toStack())
+                        || !GENERATED.containsKey(pattern) && output.what().equals(plan.finalOutput().what())) selectedRoots.add(output.what());
                 for (var input : pattern.getInputs()) {
                     if (input.getPossibleInputs().length == 1) {
                         consumers.computeIfAbsent(input.getPossibleInputs()[0].what(), ignored -> new LinkedHashSet<>()).add(output.what());
@@ -47,12 +48,13 @@ public final class PlanExplanation {
         for (var use : plan.patternTimes().entrySet()) {
             if (use.getValue() <= 0) continue;
             var pattern = use.getKey();
+            boolean storedPattern = !GENERATED.containsKey(pattern);
             Set<AEKey> roots = GENERATED.getOrDefault(pattern, Set.of());
-            if (PatternUtil.isRecursive(pattern.getDefinition().toStack())) {
+            if (storedPattern || PatternUtil.isRecursive(pattern.getDefinition().toStack())) {
                 roots = new LinkedHashSet<>(roots);
                 for (var output : pattern.getOutputs()) roots.add(output.what());
             }
-            if (!selectedRoots.isEmpty()) {
+            if (!storedPattern && !selectedRoots.isEmpty()) {
                 roots = new LinkedHashSet<>(roots);
                 roots.retainAll(selectedRoots);
             }
@@ -93,8 +95,7 @@ public final class PlanExplanation {
         for (boolean missingPass : new boolean[]{true, false}) {
             for (var use : plan.patternTimes().entrySet()) {
                 var pattern = use.getKey();
-                if (use.getValue() <= 0 || (!GENERATED.containsKey(pattern)
-                        && !PatternUtil.isRecursive(pattern.getDefinition().toStack()))) continue;
+                if (use.getValue() <= 0) continue;
                 for (var input : pattern.getInputs()) {
                     // A single missing alternative is identifiable only when no other
                     // accepted alternative occurs anywhere in the selected plan.

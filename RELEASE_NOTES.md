@@ -1,3 +1,2 @@
-- Detect return loops hidden in ingredient tags and recipes with extra tool or material inputs.
-- Restrict only the returning variant, allowing other conversion ingredients to be crafted.
-- Preserve forward slab, plank, and block crafting by checking independent material sources.
+- Show missing-source and originating-pattern explanations for selected stored patterns as well as generated recipes.
+- Keep normal recursive manufacturing routes available when an existing pattern only provides recovery or washing.
