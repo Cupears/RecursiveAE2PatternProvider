@@ -1,2 +1,1 @@
-- Prefer available manufacturing routes in partial crafting plans, including essence recipes for quartz and dyes.
-- Check multi-step alternatives without spending reserved materials or leaving false shortages behind.
+- Allow essence-made ingots to feed gold and iron block recipes when both forms can be smelted.

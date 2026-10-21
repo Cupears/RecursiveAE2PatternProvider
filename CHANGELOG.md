@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0-beta.22
+
+- Allow essence-made ingots to feed gold and iron block recipes when both forms can be smelted.
+
 ## 1.2.0-beta.21
 
 - Prefer available manufacturing routes in partial crafting plans, including essence recipes for quartz and dyes.

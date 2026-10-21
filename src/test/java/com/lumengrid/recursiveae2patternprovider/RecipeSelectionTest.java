@@ -1,5 +1,11 @@
 package com.lumengrid.recursiveae2patternprovider;
 
+import appeng.api.crafting.IPatternDetails;
+import appeng.api.crafting.PatternDetailsHelper;
+import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.AEKey;
+import appeng.api.stacks.GenericStack;
+import appeng.crafting.pattern.AEProcessingPattern;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -91,6 +97,57 @@ class RecipeSelectionTest {
         assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.IRON_INGOT, 9)}, Items.IRON_BLOCK, 1));
         assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.IRON_INGOT)}, Items.IRON_NUGGET, 9));
         assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(Items.IRON_NUGGET, 9)}, Items.IRON_INGOT, 1));
+    }
+
+    @Test
+    void smeltableStorageBlocksDoNotBecomeTheBaseResource(MinecraftServer server) {
+        for (var metal : List.of(new Item[]{Items.GOLD_INGOT, Items.GOLD_BLOCK, Items.GOLD_NUGGET},
+                new Item[]{Items.IRON_INGOT, Items.IRON_BLOCK, Items.IRON_NUGGET})) {
+            index.clear();
+            conversions(metal[0], metal[1], metal[2]);
+            add("test:essence", metal[0], 4, Items.REDSTONE, 1);
+            // Raw-metal blocks and old equipment can be smelted too.
+            var selection = selector(Set.of(metal[0], metal[1], metal[2]));
+            assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(metal[0], 9)}, metal[1], 1),
+                    "Packing must be able to manufacture its base resource: " + metal[1]);
+            assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(metal[1])}, metal[0], 9));
+            assertFalse(selection.requiresStoredInput(new ItemStack[]{new ItemStack(metal[0])}, metal[2], 9));
+            assertTrue(selection.requiresStoredInput(new ItemStack[]{new ItemStack(metal[2], 9)}, metal[0], 1));
+        }
+    }
+
+    @Test
+    void goldBlockPlanCanManufactureMissingIngotsFromEssence(MinecraftServer server) throws Exception {
+        conversions(Items.GOLD_INGOT, Items.GOLD_BLOCK, Items.GOLD_NUGGET);
+        add("test:essence", Items.GOLD_INGOT, 4, Items.REDSTONE, 8);
+        var selection = selector(Set.of(Items.GOLD_INGOT, Items.GOLD_BLOCK, Items.GOLD_NUGGET));
+        var pack = processing(Items.GOLD_INGOT, 9, Items.GOLD_BLOCK, 1);
+        var unpack = processing(Items.GOLD_BLOCK, 1, Items.GOLD_INGOT, 9);
+        var essence = processing(Items.REDSTONE, 8, Items.GOLD_INGOT, 4);
+        var printed = processing(Items.GOLD_BLOCK, 1, Items.CLOCK, 9);
+        // Use the same classification as generated patterns, then exercise AE2's
+        // actual planner with the stock and batch size from the reported failure.
+        record Conversion(IPatternDetails pattern, Item input, int amount, Item output, int count) {}
+        for (var conversion : List.of(new Conversion(pack, Items.GOLD_INGOT, 9, Items.GOLD_BLOCK, 1),
+                new Conversion(unpack, Items.GOLD_BLOCK, 1, Items.GOLD_INGOT, 9))) {
+            var stored = selection.storedInputs(new ItemStack[]{new ItemStack(conversion.input(), conversion.amount())},
+                    conversion.output(), conversion.count());
+            StoredConversionInputs.register(conversion.pattern(), stored.stream().<AEKey>map(AEItemKey::of).toList());
+        }
+        var plan = new AvailableRecipePlanningTest().calculate(List.of(printed, pack, unpack, essence),
+                Map.of(Items.GOLD_INGOT, 91L, Items.REDSTONE, 310174L), Items.CLOCK, 522);
+        assertFalse(plan.simulation());
+        assertTrue(plan.missingItems().isEmpty());
+        assertEquals(58L, plan.patternTimes().get(pack));
+        assertEquals(108L, plan.patternTimes().get(essence));
+        assertFalse(plan.patternTimes().containsKey(unpack));
+    }
+
+    private IPatternDetails processing(Item input, long amount, Item output, long count) {
+        var stack = PatternDetailsHelper.encodeProcessingPattern(
+                List.of(new GenericStack(AEItemKey.of(input), amount)),
+                List.of(new GenericStack(AEItemKey.of(output), count)));
+        return new AEProcessingPattern(AEItemKey.of(stack));
     }
 
     @Test

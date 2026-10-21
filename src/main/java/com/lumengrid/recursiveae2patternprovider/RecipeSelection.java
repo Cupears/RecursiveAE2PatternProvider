@@ -4,6 +4,9 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.tags.TagKey;
 
 import java.util.*;
 import java.util.function.Function;
@@ -13,6 +16,7 @@ import java.util.function.Predicate;
 final class RecipeSelection {
     private static final int MAX_DEPTH = 24;
     private static final int MAX_VISITS = 2048;
+    private static final TagKey<Item> STORAGE_BLOCKS = TagKey.create(Registries.ITEM, Identifier.parse("c:storage_blocks"));
     private final Map<Item, List<RecipeHolder<CraftingRecipe>>> index;
     private final Set<Item> furnaceOutputs;
     private final Predicate<RecipeHolder<CraftingRecipe>> allowed;
@@ -138,6 +142,9 @@ final class RecipeSelection {
     private int canonicalOrder(Item left, Item right) {
         var registry = net.minecraft.core.registries.BuiltInRegistries.ITEM;
         return Comparator.comparingInt((Item item) -> furnaceOutputs.contains(item) ? 0 : 1)
+                // Raw-metal blocks can be smelted just like ingots. Storage
+                // forms must not win that tie merely because their ID sorts first.
+                .thenComparingInt(item -> item.builtInRegistryHolder().is(STORAGE_BLOCKS) ? 1 : 0)
                 .thenComparingInt(item -> registry.getKey(item).getNamespace().equals("minecraft") ? 0 : 1)
                 .thenComparingInt(item -> registry.getKey(item).getPath().length())
                 .thenComparing(item -> registry.getKey(item).toString()).compare(left, right);
