@@ -2,6 +2,8 @@ package com.lumengrid.recursiveae2patternprovider;
 
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.stacks.AEKey;
+import appeng.api.config.Actionable;
+import appeng.crafting.inv.ICraftingInventory;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
@@ -38,5 +40,27 @@ public final class StoredConversionInputs {
     public static synchronized boolean contains(IPatternDetails pattern) { clean(); return PATTERNS.containsKey(new Identity(pattern)); }
     public static synchronized boolean contains(IPatternDetails pattern, AEKey input) {
         clean(); return PATTERNS.getOrDefault(new Identity(pattern), Set.of()).contains(input);
+    }
+
+    /** Generated recovery patterns have exact inputs. Check them without reserving stock. */
+    public static boolean available(IPatternDetails pattern, ICraftingInventory inventory, long crafts) {
+        Set<AEKey> stored;
+        synchronized (StoredConversionInputs.class) {
+            clean();
+            stored = PATTERNS.getOrDefault(new Identity(pattern), Set.of());
+        }
+        if (stored.isEmpty()) return true;
+        Map<AEKey, Long> required = new HashMap<>();
+        for (var input : pattern.getInputs()) {
+            var stack = input.getPossibleInputs()[0];
+            if (stored.contains(stack.what())) {
+                long count = Math.multiplyExact(Math.multiplyExact(stack.amount(), input.getMultiplier()), crafts);
+                required.merge(stack.what(), count, Math::addExact);
+            }
+        }
+        for (var entry : required.entrySet()) {
+            if (inventory.extract(entry.getKey(), entry.getValue(), Actionable.SIMULATE) < entry.getValue()) return false;
+        }
+        return true;
     }
 }

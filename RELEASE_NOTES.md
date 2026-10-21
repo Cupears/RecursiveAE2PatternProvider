@@ -1,2 +1,2 @@
-- Show missing-source and originating-pattern explanations for selected stored patterns as well as generated recipes.
-- Keep normal recursive manufacturing routes available when an existing pattern only provides recovery or washing.
+- Skip generated recovery routes when their source items are missing, including portable crafting tables and coloured cables.
+- Switch to normal manufacturing when stored recovery materials run out in a partial crafting plan.

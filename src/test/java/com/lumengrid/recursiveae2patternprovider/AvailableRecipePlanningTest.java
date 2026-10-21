@@ -33,6 +33,49 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(EphemeralTestServerProvider.class)
 class AvailableRecipePlanningTest {
     @Test
+    void partialPlanUsesPlanksInsteadOfMissingPortableTable(MinecraftServer server) throws Exception {
+        var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.CRAFTING_TABLE), 1)), Items.CHEST, 1);
+        StoredConversionInputs.register(recover);
+        var fresh = processing(List.of(new GenericStack(AEItemKey.of(Items.BAMBOO_PLANKS), 4)), Items.CHEST, 1);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.CHEST), 3),
+                new GenericStack(AEItemKey.of(Items.DIAMOND), 1)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, recover, fresh), Map.of(Items.BAMBOO_PLANKS, 340L), Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertEquals(3L, plan.patternTimes().get(fresh));
+        assertFalse(plan.patternTimes().containsKey(recover));
+        assertEquals(0L, plan.missingItems().get(AEItemKey.of(Items.CRAFTING_TABLE)));
+        assertEquals(1L, plan.missingItems().get(AEItemKey.of(Items.DIAMOND)));
+    }
+
+    @Test
+    void partialPlanUsesFreshCableRouteAfterStoredVariantRunsOut(MinecraftServer server) throws Exception {
+        var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.MAGENTA_STAINED_GLASS), 1),
+                new GenericStack(AEItemKey.of(Items.SNOWBALL), 1)), Items.GLASS, 1);
+        StoredConversionInputs.register(recover, List.of(AEItemKey.of(Items.MAGENTA_STAINED_GLASS)));
+        var fresh = processing(List.of(new GenericStack(AEItemKey.of(Items.SAND), 1)), Items.GLASS, 1);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.GLASS), 5),
+                new GenericStack(AEItemKey.of(Items.DIAMOND), 1)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, recover, fresh),
+                Map.of(Items.MAGENTA_STAINED_GLASS, 1L, Items.SNOWBALL, 5L, Items.SAND, 4L), Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertEquals(1L, plan.patternTimes().get(recover));
+        assertEquals(4L, plan.patternTimes().get(fresh));
+        assertEquals(0L, plan.missingItems().get(AEItemKey.of(Items.MAGENTA_STAINED_GLASS)));
+        assertEquals(1L, plan.missingItems().get(AEItemKey.of(Items.DIAMOND)));
+    }
+
+    @Test
+    void missingRecoveryWithoutManufacturingReportsBaseItem(MinecraftServer server) throws Exception {
+        var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.MAGENTA_STAINED_GLASS), 1)), Items.GLASS, 1);
+        StoredConversionInputs.register(recover);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.GLASS), 5)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, recover), Map.of(), Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertEquals(5L, plan.missingItems().get(AEItemKey.of(Items.GLASS)));
+        assertEquals(0L, plan.missingItems().get(AEItemKey.of(Items.MAGENTA_STAINED_GLASS)));
+    }
+
+    @Test
     void storedVariantCanCraftAuxiliaryConversionIngredients(MinecraftServer server) throws Exception {
         var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.YELLOW_STAINED_GLASS), 8),
                 new GenericStack(AEItemKey.of(Items.REDSTONE_TORCH), 1)), Items.GLASS, 8);
