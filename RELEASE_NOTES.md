@@ -1,2 +1,2 @@
-- Skip generated recovery routes when their source items are missing, including portable crafting tables and coloured cables.
-- Switch to normal manufacturing when stored recovery materials run out in a partial crafting plan.
+- Prefer available manufacturing routes in partial crafting plans, including essence recipes for quartz and dyes.
+- Check multi-step alternatives without spending reserved materials or leaving false shortages behind.

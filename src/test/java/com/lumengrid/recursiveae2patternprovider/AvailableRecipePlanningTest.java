@@ -21,6 +21,9 @@ import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.crafting.ShapedRecipePattern;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.lang.reflect.Proxy;
@@ -32,6 +35,122 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Exercise AE2's real calculation/backtracking with a small in-memory grid. */
 @ExtendWith(EphemeralTestServerProvider.class)
 class AvailableRecipePlanningTest {
+    static java.util.stream.Stream<Arguments> auditedAlternatives() throws Exception {
+        try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(
+                AvailableRecipePlanningTest.class.getResourceAsStream("/partial-plan-alternatives.tsv"),
+                java.nio.charset.StandardCharsets.UTF_8))) {
+            return reader.lines().filter(line -> !line.startsWith("#")).map(line -> {
+                var fields = line.split("\t", -1);
+                return Arguments.of(fields[0], fields[1], fields[2], fields[3]);
+            }).toList().stream();
+        }
+    }
+
+    @ParameterizedTest(name = "stock-aware partial plan: {0}")
+    @MethodSource("auditedAlternatives")
+    void auditedAlternativeUsesStockWithoutInventingFirstRecipeIngredients(String output, String firstInputs,
+            String readyInputs, String stockText, MinecraftServer server) throws Exception {
+        var items = new LinkedHashMap<String, Item>();
+        items.put(output, Items.GLASS);
+        var unused = net.minecraft.core.registries.BuiltInRegistries.ITEM.stream()
+                .filter(item -> item != Items.AIR && item != Items.GLASS && item != Items.CLOCK && item != Items.DIAMOND)
+                .iterator();
+        for (var field : (firstInputs + "," + readyInputs + "," + stockText).split(",")) {
+            var id = field.substring(0, field.lastIndexOf('='));
+            if (!items.containsKey(id)) items.put(id, unused.next());
+        }
+        var first = processing(auditInputs(firstInputs, items), Items.GLASS, 1);
+        var ready = processing(auditInputs(readyInputs, items), Items.GLASS, 1);
+        var stock = new HashMap<Item, Long>();
+        for (var stack : auditInputs(stockText, items)) stock.put(((AEItemKey) stack.what()).getItem(), stack.amount());
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.GLASS), 1),
+                new GenericStack(AEItemKey.of(Items.DIAMOND), 1)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, first, ready), stock, Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertEquals(1L, plan.patternTimes().get(ready), output);
+        assertFalse(plan.patternTimes().containsKey(first), output);
+        assertEquals(1, plan.missingItems().size(), "Only the unrelated diamond should be missing: " + output);
+        assertEquals(1L, plan.missingItems().get(AEItemKey.of(Items.DIAMOND)));
+    }
+
+    private static List<GenericStack> auditInputs(String text, Map<String, Item> items) {
+        return Arrays.stream(text.split(",")).map(field -> {
+            int split = field.lastIndexOf('=');
+            return new GenericStack(AEItemKey.of(items.get(field.substring(0, split))), Long.parseLong(field.substring(split + 1)));
+        }).toList();
+    }
+
+    @Test
+    void partialPlanUsesStoredQuartzEssenceInsteadOfMissingDust(MinecraftServer server) throws Exception {
+        var dust = processing(List.of(new GenericStack(AEItemKey.of(Items.SUGAR), 9)), Items.QUARTZ, 1);
+        var essence = processing(List.of(new GenericStack(AEItemKey.of(Items.GLOWSTONE_DUST), 8)), Items.QUARTZ, 12);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.QUARTZ), 267),
+                new GenericStack(AEItemKey.of(Items.DIAMOND), 1)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, dust, essence), Map.of(Items.GLOWSTONE_DUST, 67610L), Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertEquals(23L, plan.patternTimes().get(essence));
+        assertFalse(plan.patternTimes().containsKey(dust));
+        assertEquals(0L, plan.missingItems().get(AEItemKey.of(Items.SUGAR)));
+        assertEquals(1L, plan.missingItems().get(AEItemKey.of(Items.DIAMOND)));
+    }
+
+    @Test
+    void partialPlanUsesDyeEssenceInsteadOfMissingFlowers(MinecraftServer server) throws Exception {
+        var flower = processing(List.of(new GenericStack(AEItemKey.of(Items.PITCHER_PLANT), 1)), Items.CYAN_DYE, 2);
+        var essence = processing(List.of(new GenericStack(AEItemKey.of(Items.GLOWSTONE_DUST), 3)), Items.CYAN_DYE, 6);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.CYAN_DYE), 22),
+                new GenericStack(AEItemKey.of(Items.DIAMOND), 1)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, flower, essence), Map.of(Items.GLOWSTONE_DUST, 1000L), Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertEquals(4L, plan.patternTimes().get(essence));
+        assertEquals(0L, plan.missingItems().get(AEItemKey.of(Items.PITCHER_PLANT)));
+        assertEquals(12L, plan.usedItems().get(AEItemKey.of(Items.GLOWSTONE_DUST)));
+    }
+
+    @Test
+    void partialPlanCanCraftAnAlternativeIngredientThroughSeveralSteps(MinecraftServer server) throws Exception {
+        var unavailable = processing(List.of(new GenericStack(AEItemKey.of(Items.WARPED_PLANKS), 4)), Items.CRAFTING_TABLE, 1);
+        var table = processing(List.of(new GenericStack(AEItemKey.of(Items.BAMBOO_PLANKS), 4)), Items.CRAFTING_TABLE, 1);
+        var planks = processing(List.of(new GenericStack(AEItemKey.of(Items.BAMBOO_BLOCK), 1)), Items.BAMBOO_PLANKS, 2);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.CRAFTING_TABLE), 3),
+                new GenericStack(AEItemKey.of(Items.DIAMOND), 1)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, unavailable, table, planks), Map.of(Items.BAMBOO_BLOCK, 6L), Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertEquals(3L, plan.patternTimes().get(table));
+        assertEquals(6L, plan.patternTimes().get(planks));
+        assertEquals(0L, plan.missingItems().get(AEItemKey.of(Items.WARPED_PLANKS)));
+    }
+
+    @Test
+    void failedAlternativeTrialDoesNotSpendSharedStockOrInventMissingItems(MinecraftServer server) throws Exception {
+        var unavailable = processing(List.of(new GenericStack(AEItemKey.of(Items.REDSTONE), 1),
+                new GenericStack(AEItemKey.of(Items.PITCHER_PLANT), 1)), Items.CYAN_DYE, 1);
+        var available = processing(List.of(new GenericStack(AEItemKey.of(Items.GLOWSTONE_DUST), 1)), Items.CYAN_DYE, 1);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.CYAN_DYE), 1),
+                new GenericStack(AEItemKey.of(Items.REDSTONE), 1),
+                new GenericStack(AEItemKey.of(Items.DIAMOND), 1)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, unavailable, available),
+                Map.of(Items.REDSTONE, 1L, Items.GLOWSTONE_DUST, 1L), Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertEquals(1L, plan.patternTimes().get(available));
+        assertEquals(1L, plan.usedItems().get(AEItemKey.of(Items.REDSTONE)));
+        assertEquals(1L, plan.usedItems().get(AEItemKey.of(Items.GLOWSTONE_DUST)));
+        assertEquals(0L, plan.missingItems().get(AEItemKey.of(Items.REDSTONE)));
+        assertEquals(0L, plan.missingItems().get(AEItemKey.of(Items.PITCHER_PLANT)));
+        assertEquals(1L, plan.missingItems().get(AEItemKey.of(Items.DIAMOND)));
+    }
+
+    @Test
+    void failedRealStockTrialStillReportsAGenuineShortage(MinecraftServer server) throws Exception {
+        var first = processing(List.of(new GenericStack(AEItemKey.of(Items.PITCHER_PLANT), 1)), Items.CYAN_DYE, 2);
+        var second = processing(List.of(new GenericStack(AEItemKey.of(Items.GLOWSTONE_DUST), 3)), Items.CYAN_DYE, 6);
+        var root = processing(List.of(new GenericStack(AEItemKey.of(Items.CYAN_DYE), 2)), Items.CLOCK, 1);
+        var plan = calculate(List.of(root, first, second), Map.of(), Items.CLOCK, 1);
+        assertTrue(plan.simulation());
+        assertFalse(plan.missingItems().isEmpty());
+        assertTrue(plan.usedItems().isEmpty());
+    }
+
     @Test
     void partialPlanUsesPlanksInsteadOfMissingPortableTable(MinecraftServer server) throws Exception {
         var recover = processing(List.of(new GenericStack(AEItemKey.of(Items.CRAFTING_TABLE), 1)), Items.CHEST, 1);
@@ -510,6 +629,12 @@ class AvailableRecipePlanningTest {
         var incTime = CraftingCalculation.class.getDeclaredField("incTime");
         incTime.setAccessible(true);
         incTime.setInt(calculation, 0);
+        var running = CraftingCalculation.class.getDeclaredField("running");
+        running.setAccessible(true);
+        running.setBoolean(calculation, true);
+        var time = CraftingCalculation.class.getDeclaredField("time");
+        time.setAccessible(true);
+        time.setInt(calculation, Integer.MAX_VALUE);
         var compute = CraftingCalculation.class.getDeclaredMethod("computePlan");
         compute.setAccessible(true);
         return (ICraftingPlan) compute.invoke(calculation);

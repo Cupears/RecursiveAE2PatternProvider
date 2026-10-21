@@ -5,6 +5,8 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.crafting.IPatternDetails;
 import appeng.crafting.CraftBranchFailure;
+import appeng.crafting.CraftingCalculation;
+import appeng.crafting.inv.ChildCraftingSimulationState;
 import appeng.crafting.inv.CraftingSimulationState;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -12,6 +14,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import appeng.crafting.CraftingTreeNode;
 import appeng.crafting.CraftingTreeProcess;
 import com.lumengrid.recursiveae2patternprovider.StoredConversionInputs;
+import com.lumengrid.recursiveae2patternprovider.Config;
 import java.util.ArrayList;
 import java.util.Collection;
 import org.spongepowered.asm.mixin.*;
@@ -23,7 +26,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class StoredConversionInputMixin {
     @Shadow @Final private CraftingTreeProcess parent;
     @Shadow @Final private AEKey what;
+    @Shadow @Final private CraftingCalculation job;
+    @Shadow @Final private boolean canEmit;
     @Shadow private ArrayList<CraftingTreeProcess> nodes;
+    @Shadow private void buildChildPatterns() { throw new AssertionError(); }
     @Unique private CraftingSimulationState recursiveAE2$currentInventory;
 
     @WrapMethod(method = "request")
@@ -32,6 +38,36 @@ public abstract class StoredConversionInputMixin {
         var previous = recursiveAE2$currentInventory;
         recursiveAE2$currentInventory = inventory;
         try {
+            // The overall job may be missing an unrelated input. Before letting
+            // its diagnostic pass invent ingredients, try this dependency with
+            // real stock and AE2's normal backtracking in an isolated inventory.
+            if (Config.ENABLE.get() && parent != null && job.isSimulation() && !canEmit && !recursiveAE2$storedOnly(what)) {
+                buildChildPatterns();
+                if (nodes.size() > 1) {
+                    var trial = new ChildCraftingSimulationState(inventory);
+                    var trialContainers = containers == null ? null : new KeyCounter();
+                    var control = (CraftingCalculationAccessor) job;
+                    control.recursiveAE2$setSimulation(false);
+                    recursiveAE2$currentInventory = trial;
+                    try {
+                        original.call(trial, requested, trialContainers);
+                        trial.applyDiff(inventory);
+                        if (containers != null) containers.addAll(trialContainers);
+                        return;
+                    } catch (Exception unavailable) {
+                        if (unavailable instanceof InterruptedException interrupted) throw interrupted;
+                        if (!(unavailable instanceof CraftBranchFailure)) {
+                            if (unavailable instanceof RuntimeException runtime) throw runtime;
+                            throw new IllegalStateException("Alternative recipe probe failed", unavailable);
+                        }
+                        // Failed branches cannot consume inventory or add missing
+                        // items to the actual plan. Keep AE2's diagnostic fallback.
+                    } finally {
+                        control.recursiveAE2$setSimulation(true);
+                        recursiveAE2$currentInventory = inventory;
+                    }
+                }
+            }
             original.call(inventory, requested, containers);
         } finally {
             recursiveAE2$currentInventory = previous;
